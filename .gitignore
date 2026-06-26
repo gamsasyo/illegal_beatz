@@ -1,0 +1,7 @@
+# 개발용 산출물 (추적 제외)
+.playwright-mcp/
+.DS_Store
+
+# 루트의 디버그/테스트 스크린샷 (게임이 참조 안 함) — 하위 폴더 에셋(globehead_assets 등)은 영향 없음
+/*.jpeg
+/*.jpg
