@@ -1520,12 +1520,17 @@ function loop(now) {
 buildSkateSpot();                                    // 끝없는 야간 도시 생성
 initBeacons();                                        // 벨리샤 비콘 풀 생성
 $('#load').textContent = 'NIGHT CITY READY';
-setTimeout(() => { $('#load').classList.add('hidden'); $('#start').classList.remove('hidden'); }, 400);
+const AUTO = /[?&]autostart/.test(location.search);   // 듀얼 모드: 클릭 없이 자동 시작
+setTimeout(() => { $('#load').classList.add('hidden'); if (!AUTO) $('#start').classList.remove('hidden'); }, 400);
 
 $('#start').addEventListener('click', () => {
   $('#start').classList.add('hidden');
   started = true; last = performance.now();
 });
+if (AUTO) {
+  $('#load').classList.add('hidden'); $('#start').classList.add('hidden');
+  started = true; last = performance.now();
+}
 
 // trail tuner 와이어링
 const _bindFader = (id, key, fmt) => {
