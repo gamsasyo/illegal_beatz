@@ -563,8 +563,11 @@ function placeFeature(f, x, z) {
   else { f.ref.center.set(x, 0, z); f.ref.cy = roadBase(z) + f.topY; f.mesh.position.set(x, roadBase(z) + f.topY, z); }
 }
 // ───────────────────────── 보행자 (인도 걷기 + 횡단보도 건너기) ─────────────────────────
-const COAT_COLS = [0x2a3550, 0x3a3a42, 0x5a4632, 0x44473a, 0x6a2a32, 0x8a8478, 0x35506a, 0x202028];  // 영국 코트톤
-const SKIN_COLS = [0xe8b890, 0xd8a070, 0xc89060, 0xf0c8a0, 0xa87850];
+// 칼라풀한 옷 (밝고 다양) — 밤이라 잘 보이게 채도 높게
+const COAT_COLS = [0xff5a4d, 0x4d9fff, 0xffd23f, 0x4dd47a, 0xff8f3f, 0xb06bff, 0x2ad4c4, 0xff7ab0, 0xe8e2d0, 0x6affb0, 0xffffff, 0xff4f8b];
+const PANT_COLS = [0x2a3550, 0x3a3f4a, 0x6b5236, 0x8a8478, 0x44506a, 0x222228, 0x4d5a3a, 0x7a4a4a];   // 바지 (다양, 일부 밝게)
+// 다양한 피부톤 (인종 다양) — 밝은~깊은 톤까지
+const SKIN_COLS = [0xf2cda4, 0xe8b890, 0xd49a6a, 0xb87a4a, 0x8a5a34, 0x5e3a22, 0x9c6a3e, 0x422814];
 const XCROSS = 140;                                  // 횡단보도 주기(셰이더와 동일)
 // 공유 보행자 부품 지오메트리 (모든 보행자 동일 치수, 색만 머티리얼로 차이) — 재사용으로 지오메트리 수 절감
 const PED_GEO = {
@@ -575,9 +578,13 @@ const PED_GEO = {
 };
 function makePed() {
   const g = new THREE.Group();
-  const cm = new THREE.MeshStandardMaterial({ color: COAT_COLS[(Math.random()*COAT_COLS.length)|0], roughness: 1, flatShading: true });
-  const lm = new THREE.MeshStandardMaterial({ color: 0x23232a, roughness: 1, flatShading: true });
-  const sm = new THREE.MeshStandardMaterial({ color: SKIN_COLS[(Math.random()*SKIN_COLS.length)|0], roughness: 1, flatShading: true });
+  const coatC = COAT_COLS[(Math.random()*COAT_COLS.length)|0];
+  const pantC = PANT_COLS[(Math.random()*PANT_COLS.length)|0];
+  const skinC = SKIN_COLS[(Math.random()*SKIN_COLS.length)|0];
+  // 자체발광 살짝 → 밤에도 옷/사람이 또렷하게 (어둡게 묻힘 방지)
+  const cm = new THREE.MeshStandardMaterial({ color: coatC, emissive: coatC, emissiveIntensity: 0.22, roughness: 1, flatShading: true });
+  const lm = new THREE.MeshStandardMaterial({ color: pantC, emissive: pantC, emissiveIntensity: 0.14, roughness: 1, flatShading: true });
+  const sm = new THREE.MeshStandardMaterial({ color: skinC, emissive: skinC, emissiveIntensity: 0.16, roughness: 1, flatShading: true });
   const torso = new THREE.Mesh(PED_GEO.torso, cm); torso.position.y = 0.85; g.add(torso);
   const head = new THREE.Mesh(PED_GEO.head, sm); head.position.y = 1.27; g.add(head);
   const mkLeg = (sx) => { const p = new THREE.Group(); p.position.set(sx, 0.55, 0);
