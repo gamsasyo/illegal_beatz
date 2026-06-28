@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>PLANET TURBO — Select Game</title>
+<title>ILLEGAL BEATZ — Select Game</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Permanent+Marker&display=swap" rel="stylesheet">
 <style>
   *{ margin:0; padding:0; box-sizing:border-box; }
   html,body{ height:100%; }
@@ -19,15 +19,13 @@
     min-height:100%; padding:24px; text-align:center;
   }
 
-  #mascot{ width:216px; height:216px; image-rendering:pixelated; margin-bottom:14px;
+  #mascot{ width:170px; height:170px; image-rendering:pixelated; margin-bottom:6px;
     animation:bob 1.1s steps(2) infinite; }
   @keyframes bob{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-8px);} }
 
-  h1{
-    font-size:clamp(22px,5.5vw,44px); line-height:1.5; letter-spacing:1px;
-    color:#fff; text-shadow:4px 0 #e23c3c, 4px 4px #9e2020, 0 4px #1a2a4a, 8px 8px rgba(0,0,0,.25);
-    margin-bottom:18px;
-  }
+  /* 스케이트 그립테이프 로고 (불꽃 + illegal beatz, i 위에 별) */
+  #logo{ width:min(560px,86vw); height:auto; margin-bottom:14px;
+    filter:drop-shadow(6px 8px 0 rgba(0,0,0,.35)); }
   .sub{ font-size:10px; letter-spacing:4px; color:#ffe24a; text-shadow:2px 2px #9e6b00; margin-bottom:34px; }
 
   .games{ display:flex; gap:26px; flex-wrap:wrap; justify-content:center; }
@@ -58,7 +56,7 @@
 
   <canvas id="mascot" width="76" height="76"></canvas>
 
-  <h1>PLANET<br>TURBO</h1>
+  <canvas id="logo" width="840" height="240"></canvas>
   <div class="sub">SELECT GAME</div>
 
   <div class="games">
@@ -180,6 +178,77 @@ pixelDraw(document.getElementById('mascot'), MASCOT_SVG);
 pixelDraw(document.getElementById('ico-fly'), PLANE_SVG);
 pixelDraw(document.getElementById('ico-skate'), SKATE_SVG);
 pixelDraw(document.getElementById('ico-dual'), DUAL_SVG);
+
+// ── 스케이트 그립테이프 "illegal beatz" 로고 (게임 skate.html makeFlameTex 그대로) ──
+// 불꽃 그립테이프 + 그래피티 글자, 첫 i 위에 별 ★. 세로(128x512)로 그린 뒤 가로로 회전 배치.
+function makeFlameTex() {
+  const w = 128, h = 512, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.fillStyle = '#222228'; x.fillRect(0, 0, w, h);                 // 어두운 그립테이프
+  const lick = (cx, base, ww, hh, sway) => {
+    x.beginPath();
+    x.moveTo(cx - ww / 2, base);
+    x.bezierCurveTo(cx - ww * 0.5, base - hh * 0.4, cx - ww * 0.22 + sway, base - hh * 0.72, cx + sway, base - hh);
+    x.bezierCurveTo(cx + ww * 0.22 + sway, base - hh * 0.72, cx + ww * 0.5, base - hh * 0.4, cx + ww / 2, base);
+    x.closePath(); x.fill();
+  };
+  const ends = [{ base: h, dir: 1 }, { base: 0, dir: -1 }];
+  const layers = [
+    { col: '#cc2020', s: 1.0,  hf: 0.42 },
+    { col: '#ff7321', s: 0.70, hf: 0.32 },
+    { col: '#ffd445', s: 0.40, hf: 0.21 },
+  ];
+  const cols = [w * 0.16, w * 0.40, w * 0.62, w * 0.86];
+  for (const e of ends) for (const L of layers) {
+    x.fillStyle = L.col;
+    cols.forEach((cx, i) => {
+      const sway = (i % 2 ? 1 : -1) * 12 * L.s;
+      const hh = h * L.hf * (0.78 + 0.42 * (i % 2));
+      lick(cx, e.base, w * 0.34 * L.s, e.dir * hh, sway * e.dir);
+    });
+  }
+  const TXT = 'illegal beatz';
+  x.save();
+  x.translate(w / 2, h / 2); x.rotate(-Math.PI / 2);
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round';
+  let fs = 92;
+  x.font = `${fs}px "Permanent Marker", cursive`;
+  const maxW = h * 0.86;
+  const mw = x.measureText(TXT).width;
+  if (mw > maxW) { fs = fs * maxW / mw; x.font = `${fs}px "Permanent Marker", cursive`; }
+  x.strokeStyle = '#15151a'; x.lineWidth = fs * 0.16; x.strokeText(TXT, 0, 0);
+  x.fillStyle = '#fff'; x.fillText(TXT, 0, 0);
+  const half = x.measureText(TXT).width / 2;
+  const iCx = -half + x.measureText('i').width * 0.5;
+  const sr = fs * 0.22, sy = -fs * 0.46;
+  x.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const ang = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? sr * 0.45 : sr;
+    const sx2 = iCx + Math.cos(ang) * rad, sy2 = sy + Math.sin(ang) * rad;
+    i ? x.lineTo(sx2, sy2) : x.moveTo(sx2, sy2);
+  }
+  x.closePath();
+  x.lineWidth = fs * 0.07; x.strokeStyle = '#15151a'; x.stroke();
+  x.fillStyle = '#ffd23f'; x.fill();
+  x.restore();
+  return c;
+}
+function drawLogo() {
+  const tex = makeFlameTex();
+  const lc = document.getElementById('logo'), lx = lc.getContext('2d');
+  lx.clearRect(0, 0, lc.width, lc.height);
+  lx.save();
+  lx.translate(lc.width / 2, lc.height / 2);
+  lx.rotate(Math.PI / 2);                         // 세로 그립 → 가로 배너
+  const scale = Math.min((lc.width - 20) / tex.height, (lc.height - 16) / tex.width);
+  lx.scale(scale, scale);
+  lx.drawImage(tex, -tex.width / 2, -tex.height / 2);
+  lx.restore();
+}
+drawLogo();                                        // 폴백 폰트로 먼저
+if (document.fonts && document.fonts.load) {       // Permanent Marker 로드되면 다시 (정확한 그래피티)
+  document.fonts.load('92px "Permanent Marker"').then(drawLogo).catch(() => {});
+}
 </script>
 </body>
 </html>
