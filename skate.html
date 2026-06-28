@@ -1468,7 +1468,7 @@ function update(dt) {
   skater.userData.boardPivot.rotation.set(0, P.board.shuv, P.board.flip);   // 보드 독립 회전(킥플립/셔빗)
 
   // 발차기(푸시) — 지상에서 가속 중일 때만, 느릴수록 자주 참
-  const wantPush = !P.grinding && P.grounded && P.vel > -1 && P.vel < 15 && !locked &&   // 빠르면(다운힐) 안 밀고 그냥 탐
+  const wantPush = !P.grinding && P.grounded && P.vel > -1 && P.vel * 3.6 < 100 && !locked &&   // SPD 100 이하에서만 발로 밂(그 위 다운힐은 그냥 탐)
     (autopilot ? aiThrottle > 0 : !!keys.KeyW);
   P.pushAmt += ((wantPush ? 1 : 0) - P.pushAmt) * Math.min(1, dt * 10);
   if (wantPush) {
