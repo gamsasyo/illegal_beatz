@@ -184,16 +184,16 @@ function worldPosVarying(sh) {
       '#include <begin_vertex>\n vWP=(modelMatrix*vec4(transformed,1.0)).xyz;\n vRZ = uWrap - position.y;');   // 도로/지면 회전(-90°)상 worldZ = posZ - localY → wrap해서 작게
 }
 
-// ───────────────────────── 월드 벤딩 (비행기가 꺾으면 도로가 휜다) ─────────────────────────
+// ───────────────────────── 월드 벤딩 (공유 코스 위에 도로가 놓인다) ─────────────────────────
 // 월드 좌표계는 직선 그대로 두고 '그릴 때만' x 를 민다 — 아웃런/서브웨이서퍼 방식.
 //   → 배치·충돌·차선 로직 전부 무수정. blocked() / groundHeightAt() / LANES 가 그대로 작동한다.
-//   → 앞쪽만 휨 max(dz,0). 뒤쪽은 직선 유지 (뒤가 같이 휘면 잔상·고스트가 어긋나 보임)
-//   ★ 두 게임이 같은 A/D 를 받으므로 iframe 간 통신 없이 자동으로 같은 경로가 나온다.
-const CURV_MAX = 0.0022;        // ★ 휘는 정도. 올리면 건물이 심하게 기움 (dz² 라 멀수록 급증)
-const STEER_AUTH = 0.38;        // ★ 스케이터 자체 조향 비중. 1 이면 예전처럼 벽까지 밀림
-const BEND_FAR   = 170;         // ★ 이 거리까지만 커브. 너머는 직선 — 줄이면 먼 건물이 더 얌전해짐
-const CURV_LERP  = 0.022;       // ★ 곡률 반응 속도. 낮출수록 부드럽게 감김 (기존 0.045 는 급했음)
-let roadCurv = 0;
+//   → 앞쪽만 휨 (z > 플레이어). 뒤쪽은 직선 유지 (뒤가 같이 휘면 잔상·고스트가 어긋나 보임)
+// ★ 공유 코스 — flight.html 의 undul() 과 같은 수식/같은 시간 주기(10.5s / 4.5s).
+//   두 게임은 속도 단위가 달라 파장만 명목속도로 환산: skate 22 u/s, flight 27 u/s.
+//   플레이어 입력과 무관 → 두 화면이 같은 순간 같은 방향으로 꺾인다.
+const COURSE_V  = 22;                                   // 명목 속도 (MAXSPD)
+const COURSE_K1 = 2 * Math.PI / (10.5 * COURSE_V);     // λ ≈ 231
+const COURSE_K2 = 2 * Math.PI / ( 4.5 * COURSE_V);     // λ ≈ 99
 const bendUniforms = [];
 const BEND_CHUNK = `
   vec4 mvPosition = vec4( transformed, 1.0 );
@@ -201,25 +201,25 @@ const BEND_CHUNK = `
     mvPosition = instanceMatrix * mvPosition;
   #endif
   vec4 bWP = modelMatrix * mvPosition;
-  float bDZ = max( bWP.z - uBendZ, 0.0 );
-  // uBendFar 까지는 2차(진짜 커브), 그 너머는 접선 기울기로 직선 연장.
-  // 순수 dz² 로 두면 먼 건물이 방향키에 휙휙 휘둘린다 (거리 제곱으로 증폭)
-  float bD = min( bDZ, uBendFar );
-  bWP.x += 0.5 * uBendK * bD * bD + uBendK * uBendFar * ( bDZ - bD );
+  // 코스 L(z) = 12·sin(k1 z) + 4·sin(k2 z + 1.7). 플레이어 위치의 접선을 기준으로 상대 오프셋:
+  //   off(z) = L(z) - L(zp) - L'(zp)·(z - zp)   → 플레이어 자리에선 0, 앞으로 갈수록 코스대로 휨
+  float bz  = max( bWP.z, uBendZ );
+  float Lz  = 12.0 * sin( BK1 * bz ) + 4.0 * sin( BK2 * bz + 1.7 );
+  float Lp  = 12.0 * sin( BK1 * uBendZ ) + 4.0 * sin( BK2 * uBendZ + 1.7 );
+  float dLp = 12.0 * BK1 * cos( BK1 * uBendZ ) + 4.0 * BK2 * cos( BK2 * uBendZ + 1.7 );
+  bWP.x += Lz - Lp - dLp * ( bz - uBendZ );
   mvPosition = viewMatrix * bWP;
   gl_Position = projectionMatrix * mvPosition;
-`;
+`.replace(/BK1/g, COURSE_K1.toFixed(7)).replace(/BK2/g, COURSE_K2.toFixed(7));
 function applyBend(mat) {
   if (!mat || mat.userData.__bent) return;
   mat.userData.__bent = true;
   const prev = mat.onBeforeCompile;                 // 도로/지면은 이미 onBeforeCompile 이 있음 → 체인
   mat.onBeforeCompile = (sh, rnd) => {
     if (prev) prev(sh, rnd);
-    sh.uniforms.uBendK = { value: 0 };
     sh.uniforms.uBendZ = { value: 0 };
-    sh.uniforms.uBendFar = { value: BEND_FAR };
     bendUniforms.push(sh.uniforms);
-    sh.vertexShader = 'uniform float uBendK;\nuniform float uBendZ;\nuniform float uBendFar;\n' +
+    sh.vertexShader = 'uniform float uBendZ;\n' +
       sh.vertexShader.replace('#include <project_vertex>', BEND_CHUNK);
   };
   // ★★ three 의 기본 캐시키는 onBeforeCompile.toString() 이다.
@@ -1008,6 +1008,7 @@ const P = {
   pos: new THREE.Vector3(0, 0, 0),
   vel: 0,                 // 전진 속도 (m/s, 음수 가능)
   yaw: 0,                 // 진행 방향
+  laneT: 0,               // 차선 목표 x (A/D 가 여기를 움직이고 yaw 는 이를 추적)
   vy: 0,                  // 수직 속도
   y: 0,                   // 높이
   grounded: true,
@@ -1026,13 +1027,16 @@ const P = {
   // 보드 독립 회전 — 누른 만큼 목표각(target)을 쌓고 일정 속도로 굴려 정확히 N바퀴만 돈다
   board: { flip: 0, target: 0, shuv: 0, shuvTarget: 0, amt: 0 },   // flip=킥플립(Z), shuv=셔빗(Y), amt=발 들기 블렌드
 };
-const GRAV = 26, JUMP = 11, ACCEL = 11, MAXSPD = 22, FRICTION = 4, TURN = 2.4;
+const GRAV = 26, JUMP = 11, ACCEL = 11, MAXSPD = 22, FRICTION = 4;
+// ★ 차선 목표 노브 — LANE_MAX 는 트릭 존 한계(킥커 ±2 폭≤14, 레일 ±5.5, 차선 9 안쪽)
+const LANE_MAX = 7.5, LANE_RATE = 14, IDLE_T = 2.0, CRUISE_MIN = MAXSPD * 0.55;
+let laneIdle = 0;
 
 // ───────────────────────── trick / combo system ─────────────────────────
 const combo = { tricks: [], pts: 0, mult: 0, active: false };
 const TRICKS = {
-  KeyA: ['360 SPIN', 100], KeyD: ['KICKFLIP', 150],
-  KeyW: ['INDY GRAB', 120], KeyS: ['NOSEGRAB', 130],
+  KeyJ: ['360 SPIN', 100], KeyL: ['KICKFLIP', 150],
+  KeyI: ['INDY GRAB', 120], KeyK: ['NOSEGRAB', 130],
 };
 let score = 0, hi = Math.round(+(localStorage.getItem('ss_hi') || 0));
 const $ = s => document.querySelector(s);
@@ -1044,10 +1048,10 @@ function doAirTrick(code) {
   startCombo();
   combo.tricks.push(t[0]); combo.pts += t[1]; combo.mult++;
   // 시각 회전 / 보드 플립 / 그랩
-  if (code === 'KeyA') P.spinV = 9;                                             // 360 스핀 (몸+보드 yaw)
-  else if (code === 'KeyD') P.board.target += Math.PI * 2;                     // 진짜 킥플립 (보드만 긴축 1바퀴, 연타=더블/트리플)
-  else if (code === 'KeyW') { P.grab = 'indy'; P.grabT = 0.55; }              // 뒷손이 발 사이 잡음
-  else if (code === 'KeyS') { P.grab = 'nose'; P.grabT = 0.55; }              // 앞손이 노즈 잡음
+  if (code === 'KeyJ') P.spinV = 9;                                             // 360 스핀 (몸+보드 yaw)
+  else if (code === 'KeyL') P.board.target += Math.PI * 2;                     // 진짜 킥플립 (보드만 긴축 1바퀴, 연타=더블/트리플)
+  else if (code === 'KeyI') { P.grab = 'indy'; P.grabT = 0.55; }              // 뒷손이 발 사이 잡음
+  else if (code === 'KeyK') { P.grab = 'nose'; P.grabT = 0.55; }              // 앞손이 노즈 잡음
   showCombo();
   tryCine();                                            // 트릭 많이 쌓이면 하이라이트 슬로우모션
 }
@@ -1320,8 +1324,9 @@ function tryGrind() {
 // ───────────────────────── autopilot (E 토글 — 끊김 없는 글라이딩 VJ) ─────────────────────────
 let autopilot = false, aiThrottle = 0, aiSteer = 0;
 let apTrick = 0, apGrindT = 0, apComboN = 0;
-function aiDrive(dt) {
-  // 레일 우선: 앞쪽 레일의 '시작점'을 조준 (긴 레일도 처음부터 탐)
+// 조준 목표 x — 레일 시작점 → 차 지붕 → 킥커 → 도로 중앙. 오토파일럿과 아이들 코파일럿이 공유.
+let aiG = null, aiGdz = 1e9;                         // 마지막 조준한 그라인드 대상 (자동 올리 판정용)
+function aiTargetX() {
   let g = null, gdz = 1e9;
   for (const f of features) if (f.kind === 'rail' || f.kind === 'stairs') {
     const dz = (f.z - f.ref.len/2) - P.pos.z;        // 레일 시작점까지 거리
@@ -1334,18 +1339,23 @@ function aiDrive(dt) {
   // 킥커
   let k = null, kdz = 1e9;
   for (const f of features) if (f.kind === 'kicker') { const dz = f.z - P.pos.z; if (dz > 2 && dz < kdz) { kdz = dz; k = f.x; } }
-  const tx = (g !== null && gdz < 32) ? g : (k !== null && kdz < 44 ? k : 0);
-  const diff = angNorm(Math.atan2(tx - P.pos.x, 26) - P.yaw);
-  aiSteer = THREE.MathUtils.clamp(diff * 2.5, -1, 1);
+  aiG = g; aiGdz = gdz;
+  return (g !== null && gdz < 32) ? g : (k !== null && kdz < 44 ? k : 0);
+}
+// 정렬됐으면 올리해서 올라타기 — 고속이라 시작점 ~12m 전 점프
+function aiAutoOllie() {
+  if (P.grounded && aiG !== null && aiGdz > 8 && aiGdz < 16 && Math.abs(aiG - P.pos.x) < 3) { P.vy = JUMP; P.grounded = false; }
+}
+function aiDrive(dt) {
+  const g = aiG, gdz = aiGdz;                        // laneT 갱신부에서 이미 aiTargetX() 호출됨
   aiThrottle = 1;                                    // 항상 전진 = 끊김 없는 글라이딩
-  // 정렬됐으면 올리해서 올라타기 — 고속이라 시작점 ~12m 전 점프
-  if (P.grounded && g !== null && gdz > 8 && gdz < 16 && Math.abs(g - P.pos.x) < 3) { P.vy = JUMP; P.grounded = false; }
+  aiAutoOllie();
   // 공중: 서로 다른 트릭 연사로 큰 콤보 (착지 임박하면 멈춰 깔끔히)
   if (!P.grounded && !P.grinding) {
     apTrick -= dt;
     const aimingGrind = g !== null && gdz < 13;       // 곧 레일/차에 착지 → 트릭 자제
     if (!aimingGrind && (P.y - roadBase(P.pos.z)) > 1.5 && P.vy > -8 && apTrick <= 0) {
-      doAirTrick(['KeyD', 'KeyA', 'KeyW', 'KeyS'][apComboN % 4]); apComboN++;
+      doAirTrick(['KeyL', 'KeyJ', 'KeyI', 'KeyK'][apComboN % 4]); apComboN++;
       apTrick = 0.15;
     }
   }
@@ -1556,14 +1566,22 @@ function update(dt) {
     if (!locked) {
       const accel = autopilot ? aiThrottle > 0 : keys.KeyW;
       if (accel && P.vel < MAXSPD) P.vel += (autopilot ? ACCEL * 2.6 : ACCEL) * dt;  // 오토는 언덕도 파워로 밀어붙임
-      if (!autopilot && keys.KeyS) P.vel -= ACCEL * 1.3 * dt;
-      const steer = autopilot ? aiSteer : (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
-      const auth = autopilot ? 1 : Math.min(1, Math.abs(P.vel) / 6 + 0.15);  // 오토는 저속에서도 잘 꺾임
-      // 방향 전환은 도로 곡률이 담당. 스케이터 조향은 차선 회피용 미세조정만 남긴다.
-      // (안 줄이면 A 를 누를 때 도로도 휘고 스케이터도 밀려서 건물에 처박힘)
-      P.yaw += steer * TURN * dt * auth * STEER_AUTH;
-      P.yaw += (0 - P.yaw) * 1.6 * dt;                     // 서서히 도로와 나란해짐(셀프 센터링)
-      P.yaw = THREE.MathUtils.clamp(P.yaw, -0.7, 0.7);   // 항상 앞으로 (도로 안 좌우만)
+      // S 는 순항속도 아래로는 못 내림 — flight 에서 S(기수 올림)를 몇 초 눌러도 스케이터는 계속 간다
+      if (!autopilot && keys.KeyS && P.vel > CRUISE_MIN) P.vel -= ACCEL * 1.3 * dt;
+      // ── A/D = 차선 목표 (yaw 직접 조작 대신) ──
+      //   몇 초를 눌러도 트릭 존(±LANE_MAX) 안에서 흐를 뿐, 차선(9/13)이나 도로 끝(±14)엔 못 간다.
+      //   입력이 IDLE_T 이상 없으면 오토파일럿의 조준 로직이 살살 넘겨받는다 (코파일럿).
+      const steerIn = (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
+      if (autopilot) { P.laneT = aiTargetX(); }
+      else if (steerIn) { P.laneT = THREE.MathUtils.clamp(P.laneT + steerIn * LANE_RATE * dt, -LANE_MAX, LANE_MAX); laneIdle = 0; }
+      else {
+        laneIdle += dt;
+        if (laneIdle > IDLE_T) P.laneT += (aiTargetX() - P.laneT) * Math.min(1, 1.2 * dt);
+      }
+      // 레일 앞에 정렬돼 있으면 자동으로 올라탄다 (수동 포함) — 옆으로 흐르다 레일 옆구리에 CRASH 하는 대신 그라인드
+      if (!autopilot) { aiTargetX(); aiAutoOllie(); }
+      const targetYaw = THREE.MathUtils.clamp(Math.atan2(P.laneT - P.pos.x, 12), -0.7, 0.7);
+      P.yaw += (targetYaw - P.yaw) * Math.min(1, 6 * dt);
     }
     // 경사 모멘텀 — 내리막 가속 / 오르막 감속 (다운힐 속도감)
     const ghHere = groundHeightAt(P.pos.x, P.pos.z);
@@ -1663,13 +1681,7 @@ function loop(now) {
   road.position.set(0, 0.06, P.pos.z);   // 바닥 위로 확실히 띄움(삐져나옴/z-fight 방지)
   const wrapZ = ((P.pos.z % ROAD_WRAP) + ROAD_WRAP) % ROAD_WRAP;       // 도로 무늬 z wrap(멀리서 선 사라짐 방지)
   for (let i = 0; i < roadUniforms.length; i++) roadUniforms[i].value = wrapZ;
-  // 도로 곡률 — 1502행의 steer 와 같은 입력. A(왼쪽) → -x 방향으로 휨 (+x 가 오른쪽)
-  const steerNow = autopilot ? aiSteer : (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
-  roadCurv += (steerNow * CURV_MAX - roadCurv) * CURV_LERP;
-  for (let i = 0; i < bendUniforms.length; i++) {
-    bendUniforms[i].uBendK.value = roadCurv;
-    bendUniforms[i].uBendZ.value = P.pos.z;
-  }
+  for (let i = 0; i < bendUniforms.length; i++) bendUniforms[i].uBendZ.value = P.pos.z;   // 코스 기준점 = 플레이어
   if ((frameN++ % 30) === 0) bendScene();          // 재생성된 오브젝트의 새 머티리얼도 물림
   deformSurface(ground);
   deformSurface(road);
@@ -1677,6 +1689,7 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
+window.__dbg = () => ({ x: +P.pos.x.toFixed(2), laneT: +P.laneT.toFixed(2), vel: +P.vel.toFixed(2), y: +P.y.toFixed(2), grounded: P.grounded, grinding: !!P.grinding, combo: combo.pts, autopilot });
 // ───────────────────────── boot ─────────────────────────
 buildSkateSpot();                                    // 끝없는 야간 도시 생성
 bendScene();                                          // 모든 머티리얼에 벤딩 주입

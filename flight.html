@@ -211,7 +211,8 @@ for (let b=0;b<2;b++){ const bl=new THREE.Mesh(new THREE.BoxGeometry(0.12,2.0,0.
 
 // 지구 캐릭터 파일럿(3D)은 buildGlobeHead/edgeTex 정의 이후에 생성됨 (아래 GLOBEHEAD 섹션 뒤)
 let pilotHead = null, pilotRig = null, jumpT = 1;   // jumpT<1 이면 점프 진행중
-let jumpH = 0.9, jumpTrick = 0, jumpDir = 1, jumpTurns = 1;  // 점프 높이/트릭종류/방향/회전수 (링마다 랜덤)
+let jumpH = 0.9, jumpTrick = 0, jumpDir = 1, jumpTurns = 1;  // 점프 높이/트릭종류/방향/회전수
+const PILOT_TRICK = { KeyI: [1, 1], KeyK: [2, 1], KeyJ: [3, -1], KeyL: [4, 1] };   // 백플립 / 프론트플립 / 배럴롤 / 360
 const flashEl = document.getElementById('flash');           // 셀카 플래시
 const speedEl = document.getElementById('speedfx');         // 부스트 가장자리 글로우
 
@@ -314,11 +315,14 @@ const SHAPE_EMISSIVE = [0x2a6478, 0x1f4a8a, 0x2a4a8a, 0x8a1f5a, 0x8a3a10, 0x8a15
 const worldUp = new THREE.Vector3(0,1,0), _unitZ = new THREE.Vector3(0,0,1);
 const pathOrigin = new THREE.Vector3(), pathFwd = new THREE.Vector3(0,0,-1), pathRight = new THREE.Vector3(1,0,0), pathUp = new THREE.Vector3(0,1,0);
 // skate 의 roadUndulation 과 '시간 주기'를 맞춘 파형 (10.5s / 4.5s) — 두 화면이 같은 리듬으로 출렁임
-// λ = 27u/s × 주기.  진폭은 LP(반경 24)가 서로 겹치지 않게 낮춰둠 — 코스 난이도 노브가 여기임
-function undul(s){ return { lat: Math.sin(s*0.0222)*12 + Math.sin(s*0.0519+1.7)*4,
-                            ver: Math.sin(s*0.0222+1.9)*8  + Math.sin(s*0.0519+0.6)*3 }; }
+// ★ 공유 코스 — skate.html 의 도로 벤딩과 같은 수식/같은 시간 주기(10.5s / 4.5s).
+//   파장 = 명목속도 × 주기 (flight 27 u/s → λ 283 / 121, skate 22 u/s → 231 / 99).
+//   플레이어 입력과 무관 → 두 화면이 같은 순간 같은 방향으로 꺾인다. LP 는 이 위에 놓인다.
+const COURSE_V = 27, COURSE_K1 = 2*Math.PI/(10.5*COURSE_V), COURSE_K2 = 2*Math.PI/(4.5*COURSE_V);
+function undul(s){ return { lat: Math.sin(s*COURSE_K1)*12     + Math.sin(s*COURSE_K2+1.7)*4,
+                            ver: Math.sin(s*COURSE_K1+1.9)*8  + Math.sin(s*COURSE_K2+0.6)*3 }; }
 const _phTmp = new THREE.Vector3(), _phCl = new THREE.Vector3(), _phOff = new THREE.Vector3();
-const RING_CLEAR = 34;   // LP 패스 주변 이 반경 안엔 오브젝트 없음 (LP 반경 24보다 커야 안 파묻힘)
+const RING_CLEAR = 40;   // LP 패스 주변 이 반경 안엔 오브젝트 없음 (LP 반경 24 + 지터 12 보다 커야 안 파묻힘)
 
 // 오브젝트 배치 — 하늘에 넓게 랜덤, 단 링 패스 경로(코리도)는 비움
 function placeHand(h, dist) {
@@ -480,9 +484,8 @@ for (let j=0;j<GLOBE_COUNT;j++){
 }
 
 // ============================ 링 (경로 따라 통과 = 점수, 이탈하면 앞에 재생성) ============================
-const RING_COUNT = 16, RING_GAP = 64, RING_RADIUS = 7.5, STRAY_MAX = 220;
+const RING_COUNT = 16, RING_GAP = 64, RING_RADIUS = 7.5;
 //   RING_RADIUS 7.5 = LP 가운데 구멍 (통과 판정)   DISC_R 24 = 비닐 바깥 (충돌 판정)
-//   STRAY_MAX 220 — 예전 55 는 벗어나자마자 패스가 따라와서 '도로 밖'이 없었음
 const DISC_R = 24, LP_RPM = 33 + 1/3;                    // 진짜 33⅓ RPM
 const LP_SPIN = LP_RPM / 60 * Math.PI * 2;               // rad/s
 const LP_LABELS = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'];
@@ -538,10 +541,20 @@ const rings = [];
 const _rp = new THREE.Vector3(), _cl = new THREE.Vector3(), _sv = new THREE.Vector3(), _perp = new THREE.Vector3(), _t2 = new THREE.Vector3(), _aimPt = new THREE.Vector3();
 let ringHeadS = 0, lastS = 0;   // 패스 상의 거리 좌표 s
 // (worldUp/_unitZ/pathOrigin/pathFwd/pathRight/pathUp/undul 는 위 objects 섹션에서 선언됨)
+// s 좌표 → 월드 위치. 곡률은 비행기로부터의 거리에 걸리므로 매 프레임 다시 계산해야 한다.
+// s 좌표 (+ 코스 기준 좌우/상하 오프셋) → 월드 위치
+function pathPoint(sv, out, lat, ver){
+  const u = undul(sv);
+  return out.copy(pathOrigin)
+    .addScaledVector(pathFwd, sv)
+    .addScaledVector(pathRight, u.lat + (lat || 0))
+    .addScaledVector(pathUp, u.ver + (ver || 0));
+}
+const JIT_LAT = 12, JIT_VER = 6;   // ★ LP 가 코스 중심에서 벗어나는 폭 — 조준할 이유. 오프셋 한계보다 작아야 함
 function placeRingAt(r, s){
   r.s = s; r.passed = false; r.portal = 0; r.smash = 0;
-  const u = undul(s);
-  _rp.copy(pathOrigin).addScaledVector(pathFwd, s).addScaledVector(pathRight, u.lat).addScaledVector(pathUp, u.ver);
+  r.jLat = (Math.random()*2-1) * JIT_LAT; r.jVer = (Math.random()*2-1) * JIT_VER;
+  pathPoint(s, _rp, r.jLat, r.jVer);
   r.pos.copy(_rp); r.mesh.position.copy(_rp);
   r.mesh.quaternion.setFromUnitVectors(_unitZ, pathFwd);   // 링이 패스 진행방향을 향함
   r.mesh.scale.set(1,1,1); r.mesh.material.opacity = 1;
@@ -586,12 +599,7 @@ regenPath();
 
 // ============================ 조명 빔 (파티 리그) ============================
 // 벽을 쓰면 무조건 터널이 됨. 빛기둥은 가산합성이라 뒤가 비쳐 보여서 시야를 안 막는데,
-// 원근으로 수렴하니까 코스 라인은 그대로 읽힌다.
-// 가두는 건 눈에 안 보이는 소프트 한계로만 — 빔보다 훨씬 바깥이라 벽으로 안 느껴짐.
-const CORR_LAT = 95;                     // 좌우 소프트 한계 (빔은 58 → 한참 밖)
-const CORR_UP = 90, CORR_DN = 34;        // 위는 거의 안 막음 / 아래만 바다쯤에서
-const CORR_SOFT = 24;                    // 아주 완만하게 밀어냄
-const BEAM_X = 58;                       // 빔이 서는 위치 = 눈에 보이는 '길 가장자리'
+const BEAM_X = 48;                       // 빔이 서는 위치 = 눈에 보이는 '길 가장자리'
 const BEAM_Y = 35;                       // 기둥 중심 높이 (밑 -45 ~ 위 +115)
 const BEAM_GAP = 30, BEAM_N = 16;
 const BEAM_COLORS = [0xff2d6f, 0x7df0ff, 0xffe24a, 0x6affb0, 0xb46bff, 0xff8a3d];
@@ -628,11 +636,7 @@ for (let i = 0; i < BEAM_N; i++) for (const side of [-1, 1]){
 }
 function placeBeamAt(bm, sv){
   bm.s = sv;
-  const u = undul(sv);
-  bm.mesh.position.copy(pathOrigin)
-    .addScaledVector(pathFwd, sv)
-    .addScaledVector(pathRight, u.lat + bm.side * BEAM_X)
-    .addScaledVector(pathUp, u.ver + BEAM_Y);
+  pathPoint(sv, bm.mesh.position, bm.side * BEAM_X, BEAM_Y);
 }
 function regenBeams(){
   beamsReady = true; beamHeadS = 0;
@@ -652,50 +656,36 @@ function animBeams(time){
 }
 regenBeams();   // 초기 배치 (regenPath 가 먼저 돈 뒤라 여기서 한 번)
 
-// 통로 밖으로 못 나가게 — skate 의 blocked() 대응. 소프트존에서 밀고, 하드에서 슬라이드+감속.
-const _rel = new THREE.Vector3();
-function confineToCorridor(sP){
-  const u = undul(sP);
-  _rel.copy(plane.position).sub(pathOrigin);
-  let lat = _rel.dot(pathRight) - u.lat;
-  let ver = _rel.dot(pathUp) - u.ver;
-  let hit = false;
-  // 한쪽 방향만 처리 (v>0, lim>0). 위/아래 한계가 달라서 대칭 함수로는 안 됨.
-  const soften = (v, lim) => {
-    if (v > lim){ hit = true; return lim; }                             // 하드: 벽에 붙임
-    if (v > lim - CORR_SOFT)                                            // 소프트: 안쪽으로 밀어냄
-      return v - (v - (lim - CORR_SOFT)) / CORR_SOFT * 0.55;
-    return v;
-  };
-  const nlat = lat >= 0 ?  soften(lat, CORR_LAT) : -soften(-lat, CORR_LAT);
-  const nver = ver >= 0 ?  soften(ver, CORR_UP)  : -soften(-ver, CORR_DN);
-  if (nlat !== lat || nver !== ver){
-    plane.position.copy(pathOrigin)
-      .addScaledVector(pathFwd, sP)
-      .addScaledVector(pathRight, u.lat + nlat)
-      .addScaledVector(pathUp, u.ver + nver);
-    if (hit) speed *= 0.93;                                             // 벽 긁으며 감속 (skate P.vel*=0.7 대응)
-  }
-}
-
+window.__dbg = () => ({ offLat: +offLat.toFixed(2), offVer: +offVer.toFixed(2), railS: +railS.toFixed(1), speed: +speed.toFixed(2), score, combo, jumpT: +jumpT.toFixed(2), jumpTrick, autopilot });
 // ============================ input ============================
 const keys = {};
 addEventListener('keydown', e => {
   keys[e.code]=true;
   if (e.code==='Space') e.preventDefault();
-  if (e.code==='KeyE' && !e.repeat){ autopilot = !autopilot; if (autopilot){ regenPath(); cheatS = 0; } }   // 켤 때 현재 위치에서 패스 새로
+  if (e.code==='KeyE' && !e.repeat) autopilot = !autopilot;
+  // 트릭 버튼 — skate 의 공중 트릭과 같은 키(IJKL). 같은 순간 양쪽에서 쇼가 터진다.
+  // 링 통과 시 자동 쇼는 없앴음 — 트릭은 오직 버튼으로.
+  if (!e.repeat && jumpT >= 1 && e.code in PILOT_TRICK){
+    const t = PILOT_TRICK[e.code];
+    jumpT = 0; jumpH = 1.0; jumpTurns = 1; jumpTrick = t[0]; jumpDir = t[1];
+  }
 });
 addEventListener('keyup',   e => { keys[e.code]=false; });
 
 // ============================ flight state ============================
 let speed = 0.45; const baseSpeed = 0.45, boostSpeed = 1.0;   // 부스트 속도 80%로 낮춤 (1.25→1.0)
-let bank = 0, pitchV = 0, boosting = false;
-// ★ 진행방향에서 벗어날 수 있는 한계. 넘으면 초과분의 YAW_PULL 만큼씩 되돌아온다.
-//   하드 클램프(±0.7 딱 정지)는 부자연스러워서 스프링으로. 늘리면 더 자유롭게 돎.
-const YAW_SOFT = 1.15, PITCH_SOFT = 0.85, YAW_PULL = 0.09;
-const _fw = new THREE.Vector3();
-let autopilot = false;       // E 토글 치트 (알아서 패스 따라 슝슝)
-let cheatS = 0;              // 치트 레일 진행 좌표
+let bank = 0, boosting = false;
+// ── 레일 + 오프셋 (Star Fox 방식) ──
+//   위치 = 코스 위의 레일점 + 플레이어 오프셋. 자세는 레일 접선 + 시각 틸트(누적 아님).
+//   수동 자세가 누적되던 예전 모델은 W 를 몇 초 누르면 바닥에 붙어 LP 를 다 놓쳤다.
+// ★ 노브: 오프셋 한계는 LP 지터(12/6)보다 커야 조준이 되고, 빔(48)보다 작아야 갓길 안
+const OFF_LAT = 22, OFF_VER = 12, LAT_RATE = 18, VER_RATE = 12;
+const MAG_DIST = 60;                       // 이 거리 안의 LP 로 자석
+const MAG_IDLE = 1.6, MAG_HELD = 0.4;      // 입력 없을 때 / 그 축을 누르는 중일 때 (플레이어가 이김)
+let offLat = 0, offVer = 0, pitchVis = 0, yawVis = 0;
+const railQ = new THREE.Quaternion();
+let autopilot = false;       // E 토글 (오프셋을 AI 가 잡음 = 모든 LP 관통 + 클로즈업 카메라)
+let railS = 0;               // 레일 진행 좌표
 const BOOST_MAX = 2.5;        // 총 부스트 게이지 용량
 let boost = 1.0;             // 시작 보유량
 let boostCam = 0;            // 오토파일럿 프레이밍 (캐릭터 클로즈업 — VJ 모드용)
@@ -811,46 +801,47 @@ function update(dt) {
   // boost (수동, SPACE)
   boosting = !!keys['Space'] && boost > 0.02;
   boost = boosting ? Math.max(0, boost - dt*0.5) : Math.min(BOOST_MAX, boost + dt*0.18);
-  // 붙을 땐 빠르게(0.17) / 풀릴 땐 천천히(0.05) — 누른 순간 바로 반응해야 눌린 걸 알 수 있음
-  const _tgt = ((autopilot||boosting) ? boostSpeed : baseSpeed);
-  speed += (_tgt - speed) * (_tgt > speed ? 0.17 : 0.05);
-
-  if (autopilot){
-    // ===== 치트(E): 레일 — 패스 위에 직접 올려놓고 전진 (절대 안 헤맴, 모든 링 관통) =====
-    cheatS += speed*dt*60;                                                  // 패스를 따라 전진
-    const u = undul(cheatS);
-    plane.position.copy(pathOrigin).addScaledVector(pathFwd, cheatS).addScaledVector(pathRight, u.lat).addScaledVector(pathUp, u.ver);
-    // Object3D.lookAt 는 +Z를 타겟으로 향하게 함(카메라와 반대) → 비행기 전방(-Z) 정렬하려면 "뒤쪽 점"을 찍어야 함
-    const u2 = undul(cheatS - 10);
-    _aimPt.copy(pathOrigin).addScaledVector(pathFwd, cheatS-10).addScaledVector(pathRight, u2.lat).addScaledVector(pathUp, u2.ver);
-    _aim.position.copy(plane.position); _aim.up.set(0,1,0); _aim.lookAt(_aimPt);
-    plane.quaternion.slerp(_aim.quaternion, Math.min(1, dt*6));             // 방향 정렬 (dt 평활화로 부드러움)
-    bank += ((u2.lat - u.lat)*0.06 - bank) * 0.1;                           // 곡률 방향으로 살짝 기울임
-    pitchV = 0;
-  } else {
-    // steering — 뱅크-투-턴 (수동)
-    let tBank=0, tp=0;
+  // 입력 (오토파일럿이면 무시)
+  let tBank=0, tp=0;
+  if (!autopilot){
     if (keys['KeyA']) tBank+=1; if (keys['KeyD']) tBank-=1;
     if (keys['KeyW']) tp-=1; if (keys['KeyS']) tp+=1;
-    bank   += (tBank*0.7 - bank) * 0.07;
-    pitchV += (tp*1.2*dt - pitchV) * 0.1;
-    plane.rotateY(bank * 1.8 * dt);
-    plane.rotateX(pitchV);
-    // 진행방향에서 너무 벗어나면 살살 되돌림 — 하드 클램프가 아니라 스프링.
-    // 한계를 넘어선 만큼의 일부만 매 프레임 돌려놓으므로 벽처럼 딱 멈추지 않는다.
-    _fw.set(0,0,-1).applyQuaternion(plane.quaternion);
-    const yawOff = Math.atan2(_fw.dot(pathRight), _fw.dot(pathFwd));
-    const yEx = Math.abs(yawOff) - YAW_SOFT;
-    if (yEx > 0) plane.rotateY(Math.sign(yawOff) * yEx * YAW_PULL);
-    const pit = Math.asin(THREE.MathUtils.clamp(_fw.y, -1, 1));
-    const pEx = Math.abs(pit) - PITCH_SOFT;
-    if (pEx > 0) plane.rotateX(-Math.sign(pit) * pEx * YAW_PULL);
   }
+  // 붙을 땐 빠르게(0.17) / 풀릴 땐 천천히(0.05) — 누른 순간 바로 반응해야 눌린 걸 알 수 있음
+  // 기수 내림(W) = 살짝 더 빠름 — skate 에서 W(가속)를 꾹 누르고 있어도 뭔가 하는 느낌
+  const _tgt = ((autopilot||boosting) ? boostSpeed : baseSpeed) + (tp < 0 ? 0.12 : 0);
+  speed += (_tgt - speed) * (_tgt > speed ? 0.17 : 0.05);
+
+  // ===== 레일 + 오프셋 =====
+  railS += speed*dt*60;
+  // 플레이어 오프셋 — A = 왼쪽(-pathRight), W = 아래(-pathUp). 뗐을 때 복귀 없음
+  if (tBank) offLat = THREE.MathUtils.clamp(offLat - tBank*LAT_RATE*dt, -OFF_LAT, OFF_LAT);
+  if (tp)    offVer = THREE.MathUtils.clamp(offVer + tp*VER_RATE*dt,   -OFF_VER, OFF_VER);
+  // 자석 코파일럿 — 앞쪽 가장 가까운 LP 구멍으로. skate 에 집중하는 동안에도 LP 를 통과한다
+  let mg = null, mgd = 1e9;
+  for (const r of rings){ const d = r.s - railS; if (d > 0 && d < mgd){ mgd = d; mg = r; } }
+  if (mg && mgd < MAG_DIST){
+    const kL = autopilot ? 6 : (tBank ? MAG_HELD : MAG_IDLE);
+    const kV = autopilot ? 6 : (tp    ? MAG_HELD : MAG_IDLE);
+    offLat += (mg.jLat - offLat) * Math.min(1, kL*dt);
+    offVer += (mg.jVer - offVer) * Math.min(1, kV*dt);
+  }
+  pathPoint(railS, plane.position, offLat, offVer);
+  // 자세 = 레일 접선. Object3D.lookAt 는 +Z를 타겟으로 향하게 함 → 비행기 전방(-Z) 정렬하려면 "뒤쪽 점"을 찍어야 함
+  pathPoint(railS - 10, _aimPt, offLat, offVer);
+  _aim.position.copy(plane.position); _aim.up.set(0,1,0); _aim.lookAt(_aimPt);
+  railQ.slerp(_aim.quaternion, Math.min(1, dt*6));
+  // 시각 틸트는 매 프레임 레일 자세 위에 다시 얹는다 (누적 X)
+  const u  = undul(railS), u2 = undul(railS - 10);
+  bank    += ((autopilot ? (u2.lat - u.lat)*0.06 : tBank*0.7) - bank) * 0.07;
+  pitchVis += (tp * 0.32 - pitchVis) * 0.1;
+  yawVis   += (tBank * 0.22 - yawVis) * 0.1;
+  plane.quaternion.copy(railQ);
+  plane.rotateY(yawVis); plane.rotateX(pitchVis);
   ship.rotation.z = bank * 1.1;               // 기체 시각적 롤(기울임)
 
   const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(plane.quaternion);
   _right.set(1,0,0).applyQuaternion(plane.quaternion); _up.set(0,1,0).applyQuaternion(plane.quaternion);
-  if (!autopilot) plane.position.addScaledVector(fwd, speed*dt*60);   // 오토파일럿은 레일이 위치 설정
   prop.rotation.z += ((boosting||autopilot) ? 1.8 : 1.0);   // 프로펠러 회전 (부스트/오토시 빠르게)
 
   // beat flash from low bins
@@ -863,7 +854,7 @@ function update(dt) {
   if (pilotRig){
     const { pilot, head, armR, armL } = pilotRig;
     const targetYaw = lookBack ? Math.PI : (bank*1.1 + Math.sin(time*1.3)*0.08);
-    const targetPitch = lookBack ? -0.5 : (-pitchV*0.5 + Math.sin(time*0.8)*0.05);
+    const targetPitch = lookBack ? -0.5 : (-pitchVis*1.2 + Math.sin(time*0.8)*0.05);
     head.rotation.y += (targetYaw - head.rotation.y) * 0.08;
     head.rotation.x += (targetPitch - head.rotation.x) * 0.08;
     head.rotation.z = Math.sin(time*1.1)*0.04;
@@ -948,9 +939,8 @@ function update(dt) {
   globeMesh.instanceMatrix.needsUpdate = true;
   globeOutline.instanceMatrix.needsUpdate = true;
 
-  // ---- 링 통과 판정 + 점수 + 경로 이탈시 재생성 (수동은 순수 실력, 자석 보정 없음) ----
-  const sPlane = _sv.copy(plane.position).sub(pathOrigin).dot(pathFwd);
-  if (!autopilot) confineToCorridor(sPlane);   // 오토파일럿은 애초에 중심선 위라 불필요
+  // ---- 링 통과 판정 + 점수 ----
+  const sPlane = railS;
   // 조명 빔 리사이클 — 좌우가 같은 s 를 쓰므로 반드시 쌍으로 옮긴다
   for (let i = 0; i < BEAM_N; i++){
     const a = beams[i*2], b = beams[i*2+1];
@@ -964,14 +954,7 @@ function update(dt) {
       const dLP = plane.position.distanceTo(r.pos);
       if (dLP < RING_RADIUS){                                                     // 구멍 통과 → 점수 + 부스트 충전
         score++; boost = Math.min(BOOST_MAX, boost + 0.45);   // 링당 충전 (통과 이어가면 부스트 유지)
-        bumpCombo();                                          // 콤보 +1
-        // 링 통과 → 캐릭터 트릭! (백덤블링/앞공중제비/배럴롤/360/셀카/댄스/폴짝 랜덤)
-        jumpT = 0;
-        jumpH = 0.7 + Math.random()*0.8;
-        jumpTrick = (Math.random()*7)|0;
-        jumpDir = Math.random()<0.5 ? -1 : 1;
-        jumpTurns = Math.random()<0.5 ? 1 : 2;
-        if (jumpTrick===5){ flashEl.classList.remove('on'); void flashEl.offsetWidth; flashEl.classList.add('on'); }  // 셀카 → 플래시!
+        bumpCombo();                                          // 콤보 +1 (트릭 쇼는 IJKL 버튼으로만)
         r.portal = 0.0001; r.mesh.material.color.setHex(0x9cffe0); r.mesh.material.emissive.setHex(0x20ffb0);
       } else if (dLP < DISC_R){                                                   // 비닐에 처박음 → 박살
         smashLP(r);
@@ -997,9 +980,6 @@ function update(dt) {
   }
   lastS = sPlane;
   if (comboTimer > 0){ comboTimer -= dt; if (comboTimer <= 0) breakCombo(); }   // 일정시간 링 안 통과하면 콤보 리셋
-  const u = undul(sPlane);   // 경로 중심선에서 너무 벗어났으면 → 현재 위치/방향에 새 패스
-  _cl.copy(pathOrigin).addScaledVector(pathFwd, sPlane).addScaledVector(pathRight, u.lat).addScaledVector(pathUp, u.ver);
-  if (!autopilot && plane.position.distanceTo(_cl) > STRAY_MAX) regenPath();   // 오토파일럿 중엔 리셋 안 함
 
   // 바다/하늘/태양: 카메라 따라옴 (무한 바다)
   sky.position.copy(camera.position);

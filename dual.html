@@ -61,7 +61,7 @@
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
-  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; FX <b>L1</b>스트로브 <b>R1</b>반전 <b>L2</b>블랙 <b>□</b>휴 <b>○</b>플래시</div>
+  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>스트로브 <b>R1</b>반전 <b>L2</b>블랙</div>
   <div class="st" id="st">MANUAL</div>
   <div class="fx" id="fxst"></div>
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
@@ -77,7 +77,7 @@
   // 캐시버스터 — 주소가 같으면 브라우저가 옛날 게임 파일을 그대로 물고 있음.
   // 튜닝값 고치고 새로고침했는데 화면이 안 바뀌는 사고를 막는다.
   for (const f of frames) f.src = f.dataset.src + '&v=' + Date.now();
-  const FWD = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE'];
+  const FWD = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE', 'KeyI', 'KeyJ', 'KeyK', 'KeyL'];   // IJKL = 트릭
   let apOn = false;
 
   // 한 입력을 두 iframe 게임에 동일하게 전달 (합성 KeyboardEvent)
@@ -118,8 +118,12 @@
   // 위의 forward() 가 그대로 받아서 두 iframe 에 전달 → 게임 코드는 손 안 댐.
   const PAD_BTN = {
     0:  'Space',   // ✕  점프 / 부스트
-    3:  'KeyE',    // △  오토파일럿
     9:  'KeyE',    // OPTIONS 오토파일럿
+    // 트릭 — skate 공중 트릭 + flight 파일럿 쇼가 같은 순간에 터짐. 방향 입력과 분리 (스틱은 이동만)
+    3:  'KeyI',    // △  INDY / 백플립
+    2:  'KeyJ',    // □  360 SPIN / 배럴롤
+    1:  'KeyL',    // ○  KICKFLIP / 360
+    7:  'KeyK',    // R2 NOSEGRAB / 프론트플립
     12: 'KeyW', 13: 'KeyS', 14: 'KeyA', 15: 'KeyD',   // D-패드
   };
   const DEAD = 0.35;          // 스틱 데드존 (블루투스 PS패드는 드리프트가 좀 있음)
@@ -159,7 +163,7 @@
     }
 
     const b = gp.buttons, ax = gp.axes;
-    const want = { KeyW:false, KeyA:false, KeyS:false, KeyD:false, Space:false, KeyE:false };
+    const want = { KeyW:false, KeyA:false, KeyS:false, KeyD:false, Space:false, KeyE:false, KeyI:false, KeyJ:false, KeyK:false, KeyL:false };
     for (const i in PAD_BTN) if (b[i] && b[i].pressed) want[PAD_BTN[i]] = true;
 
     const lx = ax[0] || 0, ly = ax[1] || 0;          // 왼쪽 스틱
@@ -222,8 +226,8 @@
   // ───────────────── FX (VJ 스트로브) ─────────────────
   // 게임 조작에 안 쓰는 버튼에만 물림. 오버레이 1장 + .wrap 필터로 처리 —
   // 게임 렌더 루프는 전혀 안 건드리므로 프레임 손해가 없음.
-  const FX_HOLD = { 4:'strobe', 5:'invert', 6:'black', 2:'hue' };   // L1 / R1 / L2 / □
-  const FX_TAP  = { 1:'flash' };                                     // ○
+  const FX_HOLD = { 4:'strobe', 5:'invert', 6:'black' };   // L1 / R1 / L2  (□/○ 는 트릭에 양보)
+  const FX_TAP  = {};
   const fxOn = { strobe:false, invert:false, black:false, hue:false };
   let strobeHz = 12, flashUntil = 0, tapPrev = {};
   const $fx = document.getElementById('fx'), $wrap = document.querySelector('.wrap');
