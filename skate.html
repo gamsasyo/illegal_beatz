@@ -201,12 +201,13 @@ const BEND_CHUNK = `
     mvPosition = instanceMatrix * mvPosition;
   #endif
   vec4 bWP = modelMatrix * mvPosition;
-  // 코스 L(z) = 12·sin(k1 z) + 4·sin(k2 z + 1.7). 플레이어 위치의 접선을 기준으로 상대 오프셋:
+  // 코스 L(z) = 10·sin(k1 z). 플레이어 위치의 접선을 기준으로 상대 오프셋:
+  //   ★ 짧은 파도(λ99, 진폭4)는 뺐음 — 곡률(진폭·k²)이 커서 20m 앞 레일이 5유닛 옆에 그려졌음 (조준 오차)
   //   off(z) = L(z) - L(zp) - L'(zp)·(z - zp)   → 플레이어 자리에선 0, 앞으로 갈수록 코스대로 휨
   float bz  = max( bWP.z, uBendZ );
-  float Lz  = 12.0 * sin( BK1 * bz ) + 4.0 * sin( BK2 * bz + 1.7 );
-  float Lp  = 12.0 * sin( BK1 * uBendZ ) + 4.0 * sin( BK2 * uBendZ + 1.7 );
-  float dLp = 12.0 * BK1 * cos( BK1 * uBendZ ) + 4.0 * BK2 * cos( BK2 * uBendZ + 1.7 );
+  float Lz  = 10.0 * sin( BK1 * bz );
+  float Lp  = 10.0 * sin( BK1 * uBendZ );
+  float dLp = 10.0 * BK1 * cos( BK1 * uBendZ );
   bWP.x += Lz - Lp - dLp * ( bz - uBendZ );
   mvPosition = viewMatrix * bWP;
   gl_Position = projectionMatrix * mvPosition;
@@ -1013,6 +1014,11 @@ const P = {
   y: 0,                   // 높이
   grounded: true,
   onRamp: false,          // 램프 위에 있나 (램프 끝 발사 판정용)
+  t: 0,                   // 게임 시계 (초)
+  lipBase: 0,
+  snapDY: 0, snapDX: 0, snapT0: -9,   // 레일 흡착 이징
+  popT: -9,               // 마지막 Space 시각 (램프 립 타이밍 판정)
+  lipT: -9,               // 립을 지난 시각 (살짝 늦게 눌러도 인정하는 코요테 타임)
   grinding: null,         // 현재 그라인드 레일
   grindT: 0,              // 레일 상 위치
   grindCD: 0,             // 재흡착 방지 쿨다운
@@ -1027,9 +1033,11 @@ const P = {
   // 보드 독립 회전 — 누른 만큼 목표각(target)을 쌓고 일정 속도로 굴려 정확히 N바퀴만 돈다
   board: { flip: 0, target: 0, shuv: 0, shuvTarget: 0, amt: 0 },   // flip=킥플립(Z), shuv=셔빗(Y), amt=발 들기 블렌드
 };
-const GRAV = 26, JUMP = 11, ACCEL = 11, MAXSPD = 22, FRICTION = 4;
+// ★ 점프 감 — 평지 올리는 짧고 탁(GRAV 32/JUMP 9.5: 체공 0.6s), 램프는 rampLaunch 에서 따로 크게
+const GRAV = 32, JUMP = 9.5, ACCEL = 11, MAXSPD = 22, FRICTION = 4;
 // ★ 차선 목표 노브 — LANE_MAX 는 트릭 존 한계(킥커 ±2 폭≤14, 레일 ±5.5, 차선 9 안쪽)
-const LANE_MAX = 7.5, LANE_RATE = 14, IDLE_T = 2.0, CRUISE_MIN = MAXSPD * 0.55;
+const LANE_MAX = 7.5, LANE_RATE = 22, IDLE_T = 2.0, CRUISE_MIN = MAXSPD * 0.55;   // ★ LANE_RATE = 방향키 감도
+const DOWNHILL_CAP = 1.2;   // ★ 내리막 최고속 배율 (MAXSPD 22 × 1.2 = 26). 1.7 은 너무 빨랐음
 let laneIdle = 0;
 
 // ───────────────────────── trick / combo system ─────────────────────────
@@ -1269,6 +1277,8 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') { e.preventDefault();
     if (P.grinding) { ollieOut(); }
+    else if (P.onRamp) { P.popT = P.t; }                                 // 램프 위: 립에서 발사될 '팝' 예약
+    else if (!P.grounded && P.t - P.lipT < 0.12) { rampLaunch(); }       // 립 직후 살짝 늦게 눌러도 인정
     else if (P.grounded) { P.vy = JUMP; P.grounded = false; }
   }
   if (e.code === 'KeyE' && !e.repeat) {           // 오토파일럿 토글
@@ -1299,12 +1309,14 @@ function tryGrind() {
     _v.set(P.pos.x - r.center.x, 0, P.pos.z - r.center.z);
     const t = THREE.MathUtils.clamp(_v.dot(r.dir), -r.len/2, r.len/2);
     const rt = r.cy + r.gslope * t;                          // 접점에서의 레일 윗면 높이(직선 막대 기준)
-    if (P.y < rt - 1.0 || P.y > rt + 1.6) continue;          // 위에서 내려와 닿을 때만 (범위 넓힘)
+    if (P.y < rt - 0.8 || P.y > rt + 1.2) continue;          // 위에서 내려와 닿을 때만
     const px = r.center.x + r.dir.x * t, pz = r.center.z + r.dir.z * t;
     const d = Math.hypot(P.pos.x - px, P.pos.z - pz);
-    if (d < 2.6) {
-      P.grinding = r; P.grindT = t; P.y = rt; P.vy = 0;
-      P.pos.x = px; P.pos.z = pz;
+    if (d < 2.2) {
+      P.grinding = r; P.grindT = t; P.vy = 0;
+      // 순간이동으로 붙이지 않고 0.12s 에 걸쳐 레일로 내려앉음 (공중에서 시작하는 것처럼 보이던 원인)
+      P.snapDY = P.y - rt; P.snapDX = P.pos.x - px; P.snapT0 = P.t;
+      P.y = rt; P.pos.x = px; P.pos.z = pz;
       // 진행 방향을 레일에 맞춤 + 공중 회전 초기화(90° 붙음 방지) → 레일 따라 똑바로
       const align = Math.sign((Math.sin(P.yaw) * r.dir.x + Math.cos(P.yaw) * r.dir.z)) || 1;
       P.grindDir = align;
@@ -1343,6 +1355,11 @@ function aiTargetX() {
   return (g !== null && gdz < 32) ? g : (k !== null && kdz < 44 ? k : 0);
 }
 // 정렬됐으면 올리해서 올라타기 — 고속이라 시작점 ~12m 전 점프
+// 램프 발사 — 타이밍 맞춘 팝에만. 높이 + 속도 보너스
+function rampLaunch() {
+  P.vy = Math.min(25, (P.y - P.lipBase) * 1.7 + P.vel * 0.45 + 4);   // 중력 올린 만큼 램프는 더 세게
+  P.popT = -9; P.lipT = -9;
+}
 function aiAutoOllie() {
   if (P.grounded && aiG !== null && aiGdz > 8 && aiGdz < 16 && Math.abs(aiG - P.pos.x) < 3) { P.vy = JUMP; P.grounded = false; }
 }
@@ -1495,6 +1512,7 @@ function animateRig() {
 // ───────────────────────── update ─────────────────────────
 let T = 0;
 function update(dt) {
+  P.t += dt;
   cine.cd = Math.max(0, cine.cd - dt);                  // 쿨다운은 실제 시간으로
   const realDt = dt;
   if (cine.active) dt *= cine.slowmo;                   // 하이라이트 중엔 월드 슬로우모션
@@ -1511,9 +1529,10 @@ function update(dt) {
     const spd = Math.max(8, Math.abs(P.vel));
     P.grindT += spd * P.grindDir * dt;
     combo.pts += 50 * dt; combo.mult = Math.max(combo.mult, 1);
-    P.pos.x = r.center.x + r.dir.x * P.grindT;
+    const snapK = Math.max(0, 1 - (P.t - P.snapT0) / 0.12);   // 붙은 직후엔 원래 위치에서 레일로 부드럽게
+    P.pos.x = r.center.x + r.dir.x * P.grindT + P.snapDX * snapK;
     P.pos.z = r.center.z + r.dir.z * P.grindT;
-    P.y = r.cy + r.gslope * P.grindT;   // 직선 막대(메쉬)와 동일한 높이 → 레일 밑으로 안 꺼짐
+    P.y = r.cy + r.gslope * P.grindT + P.snapDY * snapK;   // 직선 막대(메쉬)와 동일한 높이 → 레일 밑으로 안 꺼짐
     P.vel = spd;
     // 진행 방향 끝에 도달하면 종료 (시작점에 타도 반대 끝까지 쭉 — 즉시 내림 방지)
     if ((P.grindDir > 0 && P.grindT >= r.len/2) || (P.grindDir < 0 && P.grindT <= -r.len/2)) {
@@ -1578,10 +1597,9 @@ function update(dt) {
         laneIdle += dt;
         if (laneIdle > IDLE_T) P.laneT += (aiTargetX() - P.laneT) * Math.min(1, 1.2 * dt);
       }
-      // 레일 앞에 정렬돼 있으면 자동으로 올라탄다 (수동 포함) — 옆으로 흐르다 레일 옆구리에 CRASH 하는 대신 그라인드
-      if (!autopilot) { aiTargetX(); aiAutoOllie(); }
-      const targetYaw = THREE.MathUtils.clamp(Math.atan2(P.laneT - P.pos.x, 12), -0.7, 0.7);
-      P.yaw += (targetYaw - P.yaw) * Math.min(1, 6 * dt);
+      // 점프는 플레이어(Space)와 킥커에서만. 자동 올리는 오토파일럿(E) 전용
+      const targetYaw = THREE.MathUtils.clamp(Math.atan2(P.laneT - P.pos.x, 8), -0.7, 0.7);   // 8 = 조준 거리(짧을수록 날카롭게 꺾음)
+      P.yaw += (targetYaw - P.yaw) * Math.min(1, 10 * dt);                                 // 10 = 추적 속도
     }
     // 경사 모멘텀 — 내리막 가속 / 오르막 감속 (다운힐 속도감)
     const ghHere = groundHeightAt(P.pos.x, P.pos.z);
@@ -1589,15 +1607,16 @@ function update(dt) {
     P.vel += -((ghAhead - ghHere) / 3) * 34 * dt;
     P.vel -= Math.sign(P.vel) * FRICTION * dt;
     if (Math.abs(P.vel) < 0.05) P.vel = 0;
-    P.vel = THREE.MathUtils.clamp(P.vel, -MAXSPD * 0.4, MAXSPD * 1.7);   // 내리막은 최고속 초과 허용
+    P.vel = THREE.MathUtils.clamp(P.vel, -MAXSPD * 0.4, MAXSPD * DOWNHILL_CAP);   // 내리막은 최고속 초과 허용 (상한 = DOWNHILL_CAP)
     moveXZ(Math.sin(P.yaw) * P.vel * dt, Math.cos(P.yaw) * P.vel * dt);
     const base = roadBase(P.pos.z);
     const bump = rampBump(P.pos.x, P.pos.z);
     if (bump >= 0.05) {
       P.y = base + bump; P.onRamp = true;    // 램프 돌출 위 → 타고 오름
     } else if (P.onRamp && P.vel > 6) {
-      P.grounded = false; P.onRamp = false;  // 램프 끝에서만 공중 발사 (급경사론 안 튐)
-      P.vy = Math.min(20, (P.y - base) * 1.5 + P.vel * 0.4);
+      // 램프 립 — 자동 발사 아님. 립 직전 0.3s 안에 Space(팝)를 눌렀어야 뜬다. 놓치면 그냥 굴러떨어짐.
+      P.grounded = false; P.onRamp = false; P.lipT = P.t; P.lipBase = base;
+      if (P.t - P.popT < 0.3) rampLaunch(); else P.vy = 0;
     } else {
       P.y = base; P.onRamp = false;          // 급경사여도 도로면 따라감
     }
@@ -1689,7 +1708,10 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-window.__dbg = () => ({ x: +P.pos.x.toFixed(2), laneT: +P.laneT.toFixed(2), vel: +P.vel.toFixed(2), y: +P.y.toFixed(2), grounded: P.grounded, grinding: !!P.grinding, combo: combo.pts, autopilot });
+window.__dbg = () => ({ x: +P.pos.x.toFixed(2), z: +P.pos.z.toFixed(1), laneT: +P.laneT.toFixed(2), vel: +P.vel.toFixed(2), y: +P.y.toFixed(2),
+  road: +roadBase(P.pos.z).toFixed(2), grounded: P.grounded, grinding: !!P.grinding, combo: combo.pts, autopilot,
+  rail: P.grinding ? { cy: +P.grinding.cy.toFixed(2), gslope: +P.grinding.gslope.toFixed(3), topY: P.grinding.topY, len: P.grinding.len, gT: +P.grindT.toFixed(1),
+    cz: +P.grinding.center.z.toFixed(1), roadAtRail: +roadBase(P.pos.z).toFixed(2), meshY: (() => { const f = features.find(f => f.ref === P.grinding); return f ? +f.mesh.position.y.toFixed(2) : null; })() } : null });
 // ───────────────────────── boot ─────────────────────────
 buildSkateSpot();                                    // 끝없는 야간 도시 생성
 bendScene();                                          // 모든 머티리얼에 벤딩 주입
