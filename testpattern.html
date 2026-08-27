@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>TEST PATTERN — 프로젝터 정렬</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#000;
+    font-family: ui-monospace,"SF Mono",Menlo,monospace; color:#eaf2ff; cursor:none; }
+  #stage { position:fixed; inset:0; transform-origin:50% 50%; }
+  canvas { display:block; width:100%; height:100%; }
+  #info { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    z-index:10; text-align:center; pointer-events:none; }
+  #info .res { font-size:42px; font-weight:900; letter-spacing:4px; color:#ffe24a;
+    text-shadow:3px 3px 0 #000; }
+  #info .sub { font-size:14px; letter-spacing:2px; color:#7df0ff; margin-top:8px; }
+  #keys { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:10;
+    font-size:12px; letter-spacing:1px; color:#6b7f9e; pointer-events:none; }
+  #keys b { color:#eaf2ff; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="info"><div class="res" id="res">—</div><div class="sub" id="sub">ROT 0°</div></div>
+<div id="keys"><b>F</b> 풀스크린 · <b>R</b> 90°회전 · <b>G</b> 그리드 · <b>C</b> 원 · <b>D</b> 좌우분할 · <b>H</b> 이 안내 끄기</div>
+
+<script>
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let rot = 0, grid = true, circles = true, dual = false;
+
+function draw() {
+  const dpr = devicePixelRatio || 1;
+  const w = innerWidth, h = innerHeight;
+  cv.width = w*dpr; cv.height = h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+
+  // ── 좌우 분할 (프로젝터 2대 경계 확인) ──
+  if (dual) {
+    ctx.fillStyle = 'rgba(255,60,60,.10)';  ctx.fillRect(0,0,w/2,h);
+    ctx.fillStyle = 'rgba(60,140,255,.10)'; ctx.fillRect(w/2,0,w/2,h);
+  }
+
+  // ── 그리드: 100px 간격, 중앙선 강조 ──
+  if (grid) {
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(120,180,255,.30)';
+    ctx.beginPath();
+    for (let x=0; x<=w; x+=100) { ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,h); }
+    for (let y=0; y<=h; y+=100) { ctx.moveTo(0,y+.5); ctx.lineTo(w,y+.5); }
+    ctx.stroke();
+  }
+
+  // ── 정사각형 체크: 화면 중앙에 높이 기준 정사각형 ──
+  // 사다리꼴 왜곡이 있으면 이 사각형이 즉시 틀어져 보임
+  const s = Math.min(w,h) * 0.7;
+  ctx.lineWidth = 3; ctx.strokeStyle = '#6affb0';
+  ctx.strokeRect((w-s)/2, (h-s)/2, s, s);
+
+  // ── 원: 종횡비/왜곡 확인 (찌그러지면 바로 보임) ──
+  if (circles) {
+    ctx.lineWidth = 2; ctx.strokeStyle = '#ffe24a';
+    const pts = [[w/2,h/2,s/2],[80,80,50],[w-80,80,50],[80,h-80,50],[w-80,h-80,50]];
+    for (const [x,y,r] of pts) { ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke(); }
+  }
+
+  // ── 화면 테두리 + 코너 마커: 잘림 확인 ──
+  ctx.lineWidth = 6; ctx.strokeStyle = '#ff3c5a';
+  ctx.strokeRect(3,3,w-6,h-6);
+  ctx.lineWidth = 10; ctx.strokeStyle = '#fff';
+  const L = 90;
+  const corner = (x,y,dx,dy) => { ctx.beginPath();
+    ctx.moveTo(x+dx*L,y); ctx.lineTo(x,y); ctx.lineTo(x,y+dy*L); ctx.stroke(); };
+  corner(8,8,1,1); corner(w-8,8,-1,1); corner(8,h-8,1,-1); corner(w-8,h-8,-1,-1);
+
+  // ── 코너 라벨: 회전 방향 확인용 ──
+  ctx.fillStyle='#fff'; ctx.font='900 26px ui-monospace,monospace';
+  ctx.fillText('TL',26,58); ctx.textAlign='right'; ctx.fillText('TR',w-26,58);
+  ctx.fillText('BR',w-26,h-30); ctx.textAlign='left'; ctx.fillText('BL',26,h-30);
+
+  // ── 중앙 십자 ──
+  ctx.lineWidth=2; ctx.strokeStyle='#ff3c5a'; ctx.beginPath();
+  ctx.moveTo(w/2,h/2-40); ctx.lineTo(w/2,h/2+40);
+  ctx.moveTo(w/2-40,h/2); ctx.lineTo(w/2+40,h/2); ctx.stroke();
+
+  document.getElementById('res').textContent = w + ' × ' + h;
+  document.getElementById('sub').textContent = 'ROT ' + rot + '°' + (dual ? ' · DUAL' : '');
+}
+
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k==='f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  else if (k==='r') { rot = (rot+90)%360;
+    // 90/270°일 때 화면 비율이 뒤집히므로 스케일 보정
+    const sc = (rot%180) ? innerHeight/innerWidth : 1;
+    document.getElementById('stage').style.transform = `rotate(${rot}deg) scale(${sc})`; }
+  else if (k==='g') grid = !grid;
+  else if (k==='c') circles = !circles;
+  else if (k==='d') dual = !dual;
+  else if (k==='h') { for (const id of ['info','keys'])
+    document.getElementById(id).style.display = document.getElementById(id).style.display==='none' ? '' : 'none'; }
+  draw();
+});
+addEventListener('resize', draw);
+draw();
+</script>
+</body>
+</html>

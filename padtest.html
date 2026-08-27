@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>PAD TEST — 게임패드 진단</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#080a12; color:#eaf2ff; font-family:ui-monospace,"SF Mono",Menlo,monospace;
+    padding:24px; font-size:13px; line-height:1.6; }
+  h1 { font-size:18px; letter-spacing:3px; color:#ffe24a; margin-bottom:4px; }
+  .hint { color:#6affb0; font-size:14px; margin-bottom:18px; }
+  .box { border:1px solid #1f2c4a; border-radius:8px; padding:14px 16px; margin-bottom:14px; }
+  .box h2 { font-size:11px; letter-spacing:2px; color:#7df0ff; margin-bottom:8px; }
+  .row { display:flex; gap:10px; }
+  .row .k { color:#6b7f9e; min-width:170px; }
+  .ok { color:#6affb0; } .bad { color:#ff6b7f; } .warn { color:#ffd27f; }
+  /* 버튼 그리드 */
+  #btns { display:grid; grid-template-columns:repeat(9,1fr); gap:6px; }
+  .b { border:1px solid #24304f; border-radius:5px; padding:7px 0; text-align:center;
+    font-size:11px; color:#54627e; background:#0c1020; }
+  .b.on { background:#ffe24a; color:#000; border-color:#ffe24a; font-weight:900; }
+  .b .n { display:block; font-size:9px; opacity:.7; }
+  /* 축 바 */
+  .ax { display:flex; align-items:center; gap:10px; margin-bottom:5px; }
+  .ax .lbl { min-width:60px; color:#6b7f9e; font-size:11px; }
+  .ax .bar { flex:1; height:14px; background:#0c1020; border:1px solid #24304f;
+    border-radius:3px; position:relative; }
+  .ax .fill { position:absolute; top:0; bottom:0; left:50%; background:#7df0ff; }
+  .ax .val { min-width:52px; text-align:right; font-size:11px; }
+  #log { white-space:pre-wrap; color:#9fb6d6; font-size:11px; max-height:130px; overflow:auto; }
+</style>
+</head>
+<body>
+<h1>PAD TEST</h1>
+<div class="hint">▶ 컨트롤러 아무 버튼이나 눌러보세요 (✕ 버튼 추천). 그 상태로 스크린샷 찍어주세요.</div>
+
+<div class="box"><h2>환경 진단</h2><div id="env"></div></div>
+<div class="box"><h2>감지된 패드</h2><div id="pads">— 없음 —</div></div>
+<div class="box"><h2>버튼 (눌리면 노랑)</h2><div id="btns"></div></div>
+<div class="box"><h2>축 / 스틱</h2><div id="axes">—</div></div>
+<div class="box"><h2>이벤트 로그</h2><div id="log"></div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const line = (k,v,cls) => `<div class="row"><span class="k">${k}</span><span class="${cls||''}">${v}</span></div>`;
+
+// ── 환경: 여기서 대부분의 원인이 드러남 ──
+const ua = navigator.userAgent;
+const browser = /Firefox\//.test(ua) ? 'Firefox'
+  : /Edg\//.test(ua) ? 'Edge'
+  : /Chrome\//.test(ua) ? 'Chrome'
+  : /Safari\//.test(ua) ? 'Safari ⚠ Gamepad 지원이 제한적입니다'
+  : '알 수 없음';
+$('env').innerHTML =
+  line('브라우저', browser, /Safari/.test(browser) ? 'bad' : 'ok') +
+  line('프로토콜', location.protocol, location.protocol === 'file:' ? 'warn' : 'ok') +
+  line('보안 컨텍스트', isSecureContext ? 'true' : 'false ⚠ Gamepad API 차단됨',
+       isSecureContext ? 'ok' : 'bad') +
+  line('getGamepads 존재', navigator.getGamepads ? 'true' : 'false ⚠',
+       navigator.getGamepads ? 'ok' : 'bad') +
+  line('상위 프레임인가', window.top === window.self ? 'true' : 'false ⚠ iframe 안입니다',
+       window.top === window.self ? 'ok' : 'bad');
+
+const log = m => { $('log').textContent = m + '\n' + $('log').textContent; };
+log('페이지 로드됨. 버튼 입력 대기 중...');
+addEventListener('gamepadconnected',    e => log('✓ CONNECTED: ' + e.gamepad.id + ' (mapping=' + e.gamepad.mapping + ')'));
+addEventListener('gamepaddisconnected', e => log('✗ DISCONNECTED: ' + e.gamepad.id));
+// 클릭도 사용자 제스처로 인정되므로 기록해둠
+addEventListener('pointerdown', () => log('· 마우스 클릭 (사용자 제스처 발생)'));
+
+let seen = 0;
+function poll() {
+  const pads = (navigator.getGamepads ? navigator.getGamepads() : []) || [];
+  const live = [].filter.call(pads, p => p && p.connected);
+
+  $('pads').innerHTML = live.length
+    ? live.map((p,i) => line('#' + p.index + ' id', p.id, 'ok') +
+        line('  mapping', p.mapping || '(빈 문자열) ⚠ 비표준',
+             p.mapping === 'standard' ? 'ok' : 'warn') +
+        line('  버튼/축 개수', p.buttons.length + ' / ' + p.axes.length)).join('<hr style="border:0;border-top:1px solid #1f2c4a;margin:8px 0">')
+    : '<span class="bad">— 감지 안 됨 —</span>';
+
+  const gp = live[0];
+  if (gp && !seen) { seen = 1; log('✓ 폴링으로 패드 감지: ' + gp.id); }
+
+  $('btns').innerHTML = (gp ? gp.buttons : Array(17).fill(null)).map((b,i) =>
+    `<div class="b ${b && b.pressed ? 'on' : ''}">${i}<span class="n">${
+      b ? b.value.toFixed(1) : '-'}</span></div>`).join('');
+
+  $('axes').innerHTML = gp ? gp.axes.map((v,i) =>
+    `<div class="ax"><span class="lbl">axis ${i}</span><span class="bar">
+      <span class="fill" style="${v<0 ? 'right:50%;left:auto;width:'+(-v*50)+'%' : 'width:'+(v*50)+'%'}"></span>
+    </span><span class="val">${v.toFixed(2)}</span></div>`).join('') : '—';
+
+  requestAnimationFrame(poll);
+}
+poll();
+</script>
+</body>
+</html>

@@ -36,6 +36,10 @@
   #combo.show { animation: combopop .26s cubic-bezier(.2,1.6,.4,1); }
   @keyframes combopop { 0%{ transform:scale(1.8) rotate(-5deg); } 60%{ transform:scale(.92) rotate(2deg); } 100%{ transform:scale(1) rotate(0); } }
   #flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:9; }
+  /* 부스트 속도감 — 가장자리만 타오름 (중앙은 비워서 시야 안 가림) */
+  #speedfx { position:fixed; inset:0; pointer-events:none; z-index:8; opacity:0;
+    background: radial-gradient(ellipse at center, rgba(255,190,60,0) 38%,
+      rgba(255,170,40,.30) 72%, rgba(255,120,20,.72) 100%); }
   #flash.on { animation: flashfx .4s ease-out; }
   @keyframes flashfx { 0%{ opacity:.9; } 100%{ opacity:0; } }
   #speed { color: #fc6; }
@@ -63,16 +67,18 @@
 </style>
 </head>
 <body>
-<div id="hud">
+<!-- <div id="hud">
   <div>WASD — STEER  ·  SPACE — BOOST</div>
-</div>
+</div> -->
 <div id="boostwrap">
   <div id="boostlabel">≫ TURBO パワー ≪</div>
   <div id="boostsegs"></div>
 </div>
 <div id="combo"><div class="num">0</div><div class="lbl">COMBO</div></div>
 <div id="flash"></div>
+<div id="speedfx"></div>
 <div id="center"></div>
+
 <div id="fader">
   <label>MAX DENSITY — <b><span id="densval">300</span></b>  ·  <span id="micstat">MIC OFF</span></label>
   <input id="density" type="range" min="0" max="800" value="300" step="10" />
@@ -207,6 +213,7 @@ for (let b=0;b<2;b++){ const bl=new THREE.Mesh(new THREE.BoxGeometry(0.12,2.0,0.
 let pilotHead = null, pilotRig = null, jumpT = 1;   // jumpT<1 이면 점프 진행중
 let jumpH = 0.9, jumpTrick = 0, jumpDir = 1, jumpTurns = 1;  // 점프 높이/트릭종류/방향/회전수 (링마다 랜덤)
 const flashEl = document.getElementById('flash');           // 셀카 플래시
+const speedEl = document.getElementById('speedfx');         // 부스트 가장자리 글로우
 
 // ============================ glove (instanced) ============================
 const CUBE_COUNT = 800;
@@ -306,9 +313,12 @@ const SHAPE_EMISSIVE = [0x2a6478, 0x1f4a8a, 0x2a4a8a, 0x8a1f5a, 0x8a3a10, 0x8a15
 // --- 링 패스 좌표계 (placeHand가 경로를 비우는 데 써서 objects보다 먼저 선언) ---
 const worldUp = new THREE.Vector3(0,1,0), _unitZ = new THREE.Vector3(0,0,1);
 const pathOrigin = new THREE.Vector3(), pathFwd = new THREE.Vector3(0,0,-1), pathRight = new THREE.Vector3(1,0,0), pathUp = new THREE.Vector3(0,1,0);
-function undul(s){ return { lat: Math.sin(s*0.012)*22 + Math.sin(s*0.028)*7, ver: Math.sin(s*0.015)*13 + Math.sin(s*0.022)*5 }; }
+// skate 의 roadUndulation 과 '시간 주기'를 맞춘 파형 (10.5s / 4.5s) — 두 화면이 같은 리듬으로 출렁임
+// λ = 27u/s × 주기.  진폭은 LP(반경 24)가 서로 겹치지 않게 낮춰둠 — 코스 난이도 노브가 여기임
+function undul(s){ return { lat: Math.sin(s*0.0222)*12 + Math.sin(s*0.0519+1.7)*4,
+                            ver: Math.sin(s*0.0222+1.9)*8  + Math.sin(s*0.0519+0.6)*3 }; }
 const _phTmp = new THREE.Vector3(), _phCl = new THREE.Vector3(), _phOff = new THREE.Vector3();
-const RING_CLEAR = 24;   // 링 패스 주변 이 반경 안엔 오브젝트 없음
+const RING_CLEAR = 34;   // LP 패스 주변 이 반경 안엔 오브젝트 없음 (LP 반경 24보다 커야 안 파묻힘)
 
 // 오브젝트 배치 — 하늘에 넓게 랜덤, 단 링 패스 경로(코리도)는 비움
 function placeHand(h, dist) {
@@ -470,20 +480,82 @@ for (let j=0;j<GLOBE_COUNT;j++){
 }
 
 // ============================ 링 (경로 따라 통과 = 점수, 이탈하면 앞에 재생성) ============================
-const RING_COUNT = 16, RING_GAP = 48, RING_RADIUS = 7.5, STRAY_MAX = 55;
-const ringGeo = new THREE.TorusGeometry(RING_RADIUS, 0.65, 14, 36);
+const RING_COUNT = 16, RING_GAP = 64, RING_RADIUS = 7.5, STRAY_MAX = 220;
+//   RING_RADIUS 7.5 = LP 가운데 구멍 (통과 판정)   DISC_R 24 = 비닐 바깥 (충돌 판정)
+//   STRAY_MAX 220 — 예전 55 는 벗어나자마자 패스가 따라와서 '도로 밖'이 없었음
+const DISC_R = 24, LP_RPM = 33 + 1/3;                    // 진짜 33⅓ RPM
+const LP_SPIN = LP_RPM / 60 * Math.PI * 2;               // rad/s
+const LP_LABELS = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'];
+const LP_ACCENT = [0xffe24a, 0xff6bb5, 0x7df0ff];
+// LP 한 장 = 캔버스 텍스처 (비닐 그루브 + 라벨 + 얼굴). 얼굴 PNG 는 비동기라 로드되면 다시 그림.
+function makeLPTexture(name, accent){
+  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  // 구멍(7.5)이 커서 라벨을 17까지 넓혀야 얼굴이 들어갈 밴드가 생김.
+  //   HR ─── MID ─── LR ──────── R
+  //   80    130     181        256  (px)
+  //   구멍   얼굴궤도  라벨끝     비닐끝
+  const g = cv.getContext('2d'), C = S/2, R = S/2;
+  const LR = R * (17/DISC_R), HR = R * (RING_RADIUS/DISC_R), MID = (LR+HR)/2;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const draw = img => {
+    g.clearRect(0,0,S,S);
+    g.fillStyle = '#0b0b0e'; g.beginPath(); g.arc(C,C,R,0,7); g.fill();          // 비닐
+    for (let r = LR+7; r < R-3; r += 3.1){                                        // 그루브
+      g.strokeStyle = 'rgba(255,255,255,' + (0.035 + (r*7919%13)/13*0.05) + ')';
+      g.lineWidth = 1; g.beginPath(); g.arc(C,C,r,0,7); g.stroke();
+    }
+    const sh = g.createLinearGradient(0,0,S,S);                                   // 빛 반사
+    sh.addColorStop(0,'rgba(255,255,255,0)'); sh.addColorStop(.45,'rgba(255,255,255,.13)');
+    sh.addColorStop(.55,'rgba(255,255,255,.13)'); sh.addColorStop(1,'rgba(255,255,255,0)');
+    g.save(); g.beginPath(); g.arc(C,C,R,0,7); g.clip(); g.fillStyle = sh; g.fillRect(0,0,S,S); g.restore();
+    g.fillStyle = '#' + accent.toString(16).padStart(6,'0');                      // 라벨 밴드
+    g.beginPath(); g.arc(C,C,LR,0,7); g.fill();
+    const BW = LR - HR;                                                           // 밴드 폭
+    for (let i = 0; i < 4; i++){
+      if (img){                                                                   // 얼굴 4개 (0/90/180/270°)
+        const h = BW*0.84, w = h*img.width/img.height;
+        g.save(); g.translate(C,C); g.rotate(i*Math.PI/2); g.translate(0,-MID);
+        g.drawImage(img, -w/2, -h/2, w, h); g.restore();
+      }
+      g.save(); g.translate(C,C);                                                 // 이름 4개 (사이사이 45°)
+      g.rotate(i*Math.PI/2 + Math.PI/4); g.translate(0,-MID);
+      g.fillStyle = '#140d04'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '900 ' + Math.round(BW*0.16) + 'px ui-monospace, monospace';
+      g.fillText(name, 0, 0); g.restore();
+    }
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 2;                           // 라벨 테두리
+    g.beginPath(); g.arc(C,C,LR,0,7); g.stroke();
+    tex.needsUpdate = true;
+  };
+  draw(null);
+  const im = new Image();
+  im.onload = () => draw(im);
+  im.src = 'bitmap/' + encodeURIComponent(name) + '.png';                         // 파일명에 공백 있음
+  return tex;
+}
+const ringGeo = new THREE.RingGeometry(RING_RADIUS, DISC_R, 64, 1);   // 가운데가 진짜 뚫린 원판
 const rings = [];
 const _rp = new THREE.Vector3(), _cl = new THREE.Vector3(), _sv = new THREE.Vector3(), _perp = new THREE.Vector3(), _t2 = new THREE.Vector3(), _aimPt = new THREE.Vector3();
 let ringHeadS = 0, lastS = 0;   // 패스 상의 거리 좌표 s
 // (worldUp/_unitZ/pathOrigin/pathFwd/pathRight/pathUp/undul 는 위 objects 섹션에서 선언됨)
 function placeRingAt(r, s){
-  r.s = s; r.passed = false; r.portal = 0;
+  r.s = s; r.passed = false; r.portal = 0; r.smash = 0;
   const u = undul(s);
   _rp.copy(pathOrigin).addScaledVector(pathFwd, s).addScaledVector(pathRight, u.lat).addScaledVector(pathUp, u.ver);
   r.pos.copy(_rp); r.mesh.position.copy(_rp);
   r.mesh.quaternion.setFromUnitVectors(_unitZ, pathFwd);   // 링이 패스 진행방향을 향함
-  r.mesh.scale.setScalar(1); r.mesh.material.opacity = 1;
-  r.mesh.material.color.setHex(0xffe24a); r.mesh.material.emissive.setHex(0xffaa10);
+  r.mesh.scale.set(1,1,1); r.mesh.material.opacity = 1;
+  r.mesh.material.color.setHex(0xffffff);            // 텍스처 원색 그대로 (통과/충돌 때만 틴트)
+  r.mesh.material.emissive.setHex(r.accent);
+}
+// LP 비닐에 충돌 — 게임오버는 안 시킴 (파티용). 감속 + 부스트 손실 + 콤보 끊김.
+function smashLP(r){
+  breakCombo();
+  speed *= 0.45;
+  boost = Math.max(0, boost - 0.8);
+  r.smash = 1;
+  r.mesh.material.color.setHex(0xff5050);
+  flashEl.classList.remove('on'); void flashEl.offsetWidth; flashEl.classList.add('on');
 }
 function regenPath(){   // 현재 비행기 위치·방향에서 새 패스
   pathOrigin.copy(plane.position);
@@ -493,13 +565,118 @@ function regenPath(){   // 현재 비행기 위치·방향에서 새 패스
   let s = RING_GAP*1.5;
   for (const r of rings){ placeRingAt(r, s); s += RING_GAP; }
   ringHeadS = s - RING_GAP; lastS = 0;
+  if (beamsReady) regenBeams();          // 패스가 새로 깔리면 조명도 따라감 (초기 1회는 아래에서)
 }
+const lpTex = LP_LABELS.map((n,i) => makeLPTexture(n, LP_ACCENT[i]));
 for (let i=0;i<RING_COUNT;i++){
-  const mesh = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color:0xffe24a, emissive:0xffaa10, emissiveIntensity:0.9, metalness:0.3, roughness:0.4, transparent:true }));
+  const k = i % LP_LABELS.length;
+  const mesh = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({
+    map: lpTex[k], side: THREE.DoubleSide, transparent: true,
+    // fog:false — 씬 안개(FogExp2 0.011)가 100유닛에서 70% 덮어버림.
+    // LP 는 '길'이라 멀리서 보여야 코스를 읽을 수 있으므로 안개 면제.
+    fog: false, toneMapped: false,
+    // emissiveIntensity 는 선형값 — 0.22 면 sRGB 로 ~0.5 라 검정 비닐이 죽음. 0.05 로.
+    emissive: LP_ACCENT[k], emissiveIntensity: 0.05, metalness: 0.3, roughness: 0.45 }));
   scene.add(mesh);
-  rings.push({ mesh, pos: new THREE.Vector3(), s:0, passed:false, portal:0 });
+  rings.push({ mesh, pos: new THREE.Vector3(), s:0, passed:false, portal:0,
+               smash:0, spin: (i*2.39) % 6.28, accent: LP_ACCENT[k] });
 }
 regenPath();
+
+
+// ============================ 조명 빔 (파티 리그) ============================
+// 벽을 쓰면 무조건 터널이 됨. 빛기둥은 가산합성이라 뒤가 비쳐 보여서 시야를 안 막는데,
+// 원근으로 수렴하니까 코스 라인은 그대로 읽힌다.
+// 가두는 건 눈에 안 보이는 소프트 한계로만 — 빔보다 훨씬 바깥이라 벽으로 안 느껴짐.
+const CORR_LAT = 95;                     // 좌우 소프트 한계 (빔은 58 → 한참 밖)
+const CORR_UP = 90, CORR_DN = 34;        // 위는 거의 안 막음 / 아래만 바다쯤에서
+const CORR_SOFT = 24;                    // 아주 완만하게 밀어냄
+const BEAM_X = 58;                       // 빔이 서는 위치 = 눈에 보이는 '길 가장자리'
+const BEAM_Y = 35;                       // 기둥 중심 높이 (밑 -45 ~ 위 +115)
+const BEAM_GAP = 30, BEAM_N = 16;
+const BEAM_COLORS = [0xff2d6f, 0x7df0ff, 0xffe24a, 0x6affb0, 0xb46bff, 0xff8a3d];
+
+// 위로 갈수록 사라지는 알파 그라디언트 (실린더 UV: v=0 바닥 → v=1 꼭대기)
+function makeBeamTexture(){
+  const cv = document.createElement('canvas'); cv.width = 1; cv.height = 128;
+  const g = cv.getContext('2d');
+  const gr = g.createLinearGradient(0, 128, 0, 0);        // 캔버스 아래 = 빔 바닥
+  gr.addColorStop(0.00, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.09, 'rgba(255,255,255,1)');           // 바닥 근처가 제일 밝음
+  gr.addColorStop(0.50, 'rgba(255,255,255,.42)');
+  gr.addColorStop(1.00, 'rgba(255,255,255,0)');           // 위로 소멸
+  g.fillStyle = gr; g.fillRect(0, 0, 1, 128);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const beamTex = makeBeamTexture();
+const beamGeo = new THREE.CylinderGeometry(4.0, 1.2, 160, 10, 1, true);   // 위로 퍼지는 서치라이트
+var beamsReady = false;      // var — regenPath() 가 이 블록보다 먼저 실행되므로 TDZ 회피
+const beams = [];
+let beamHeadS = 0;
+const _bq = new THREE.Quaternion();
+for (let i = 0; i < BEAM_N; i++) for (const side of [-1, 1]){
+  const c = BEAM_COLORS[(beams.length) % BEAM_COLORS.length];
+  const mesh = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
+    color: c, map: beamTex, transparent: true, opacity: 0.7,
+    // 낮 하늘이라 Additive 는 전부 흰색으로 날아감 → 일반 알파.
+    // 밝은 배경에서 읽히려면 채도/불투명도로 승부해야 함.
+    depthWrite: false,                  // 반투명끼리 서로 가리지 않게
+    side: THREE.DoubleSide, fog: false }));
+  scene.add(mesh);
+  beams.push({ mesh, side, s: 0, ph: beams.length * 1.31 });   // ph = 개별 위상 (동시에 안 깜빡이게)
+}
+function placeBeamAt(bm, sv){
+  bm.s = sv;
+  const u = undul(sv);
+  bm.mesh.position.copy(pathOrigin)
+    .addScaledVector(pathFwd, sv)
+    .addScaledVector(pathRight, u.lat + bm.side * BEAM_X)
+    .addScaledVector(pathUp, u.ver + BEAM_Y);
+}
+function regenBeams(){
+  beamsReady = true; beamHeadS = 0;
+  for (let i = 0; i < BEAM_N; i++){
+    const sv = i * BEAM_GAP;
+    placeBeamAt(beams[i*2], sv); placeBeamAt(beams[i*2+1], sv);
+    beamHeadS = sv;
+  }
+}
+// 무빙헤드처럼 좌우로 흔들리고 밝기가 맥동
+function animBeams(time){
+  for (const bm of beams){
+    _bq.setFromAxisAngle(pathFwd, Math.sin(time * 0.55 + bm.ph) * 0.17 * bm.side);
+    bm.mesh.quaternion.copy(_bq);
+    bm.mesh.material.opacity = 0.54 + Math.sin(time * 2.3 + bm.ph) * 0.16;
+  }
+}
+regenBeams();   // 초기 배치 (regenPath 가 먼저 돈 뒤라 여기서 한 번)
+
+// 통로 밖으로 못 나가게 — skate 의 blocked() 대응. 소프트존에서 밀고, 하드에서 슬라이드+감속.
+const _rel = new THREE.Vector3();
+function confineToCorridor(sP){
+  const u = undul(sP);
+  _rel.copy(plane.position).sub(pathOrigin);
+  let lat = _rel.dot(pathRight) - u.lat;
+  let ver = _rel.dot(pathUp) - u.ver;
+  let hit = false;
+  // 한쪽 방향만 처리 (v>0, lim>0). 위/아래 한계가 달라서 대칭 함수로는 안 됨.
+  const soften = (v, lim) => {
+    if (v > lim){ hit = true; return lim; }                             // 하드: 벽에 붙임
+    if (v > lim - CORR_SOFT)                                            // 소프트: 안쪽으로 밀어냄
+      return v - (v - (lim - CORR_SOFT)) / CORR_SOFT * 0.55;
+    return v;
+  };
+  const nlat = lat >= 0 ?  soften(lat, CORR_LAT) : -soften(-lat, CORR_LAT);
+  const nver = ver >= 0 ?  soften(ver, CORR_UP)  : -soften(-ver, CORR_DN);
+  if (nlat !== lat || nver !== ver){
+    plane.position.copy(pathOrigin)
+      .addScaledVector(pathFwd, sP)
+      .addScaledVector(pathRight, u.lat + nlat)
+      .addScaledVector(pathUp, u.ver + nver);
+    if (hit) speed *= 0.93;                                             // 벽 긁으며 감속 (skate P.vel*=0.7 대응)
+  }
+}
 
 // ============================ input ============================
 const keys = {};
@@ -517,7 +694,8 @@ let autopilot = false;       // E 토글 치트 (알아서 패스 따라 슝슝)
 let cheatS = 0;              // 치트 레일 진행 좌표
 const BOOST_MAX = 2.5;        // 총 부스트 게이지 용량
 let boost = 1.0;             // 시작 보유량
-let boostCam = 0;            // 부스트시 카메라 당김 (부드럽게 보간)
+let boostCam = 0;            // 오토파일럿 프레이밍 (캐릭터 클로즈업 — VJ 모드용)
+let spdFov  = 0;             // 수동 부스트 속도감 (화각 확대 + 뒤로 빠짐). 둘을 섞으면 서로 상쇄됨
 let score = 0, combo = 0, comboTimer = 0;
 const comboEl = document.getElementById('combo'), comboNumEl = comboEl.querySelector('.num');
 function bumpCombo(){
@@ -629,7 +807,9 @@ function update(dt) {
   // boost (수동, SPACE)
   boosting = !!keys['Space'] && boost > 0.02;
   boost = boosting ? Math.max(0, boost - dt*0.5) : Math.min(BOOST_MAX, boost + dt*0.18);
-  speed += (((autopilot||boosting) ? boostSpeed : baseSpeed) - speed)*0.06;   // 오토파일럿/부스트시 빠르게
+  // 붙을 땐 빠르게(0.17) / 풀릴 땐 천천히(0.05) — 누른 순간 바로 반응해야 눌린 걸 알 수 있음
+  const _tgt = ((autopilot||boosting) ? boostSpeed : baseSpeed);
+  speed += (_tgt - speed) * (_tgt > speed ? 0.17 : 0.05);
 
   if (autopilot){
     // ===== 치트(E): 레일 — 패스 위에 직접 올려놓고 전진 (절대 안 헤맴, 모든 링 관통) =====
@@ -757,11 +937,19 @@ function update(dt) {
 
   // ---- 링 통과 판정 + 점수 + 경로 이탈시 재생성 (수동은 순수 실력, 자석 보정 없음) ----
   const sPlane = _sv.copy(plane.position).sub(pathOrigin).dot(pathFwd);
+  if (!autopilot) confineToCorridor(sPlane);   // 오토파일럿은 애초에 중심선 위라 불필요
+  // 조명 빔 리사이클 — 좌우가 같은 s 를 쓰므로 반드시 쌍으로 옮긴다
+  for (let i = 0; i < BEAM_N; i++){
+    const a = beams[i*2], b = beams[i*2+1];
+    if (a.s < sPlane - 45){ beamHeadS += BEAM_GAP; placeBeamAt(a, beamHeadS); placeBeamAt(b, beamHeadS); }
+  }
+  animBeams(time);
   for (const r of rings){
     if (r.s < sPlane - 30){ ringHeadS += RING_GAP; placeRingAt(r, ringHeadS); }   // 뒤로 가면 앞으로
     if (!r.passed && lastS < r.s && sPlane >= r.s){                               // 이번 프레임 링 평면 통과?
       r.passed = true;
-      if (plane.position.distanceTo(r.pos) < RING_RADIUS){                        // 링 안으로 → 점수 + 부스트 충전
+      const dLP = plane.position.distanceTo(r.pos);
+      if (dLP < RING_RADIUS){                                                     // 구멍 통과 → 점수 + 부스트 충전
         score++; boost = Math.min(BOOST_MAX, boost + 0.45);   // 링당 충전 (통과 이어가면 부스트 유지)
         bumpCombo();                                          // 콤보 +1
         // 링 통과 → 캐릭터 트릭! (백덤블링/앞공중제비/배럴롤/360/셀카/댄스/폴짝 랜덤)
@@ -772,12 +960,26 @@ function update(dt) {
         jumpTurns = Math.random()<0.5 ? 1 : 2;
         if (jumpTrick===5){ flashEl.classList.remove('on'); void flashEl.offsetWidth; flashEl.classList.add('on'); }  // 셀카 → 플래시!
         r.portal = 0.0001; r.mesh.material.color.setHex(0x9cffe0); r.mesh.material.emissive.setHex(0x20ffb0);
-      } else { r.mesh.material.emissive.setHex(0xff2424); breakCombo(); }          // 빗나감 → 빨강 + 콤보 끊김
+      } else if (dLP < DISC_R){                                                   // 비닐에 처박음 → 박살
+        smashLP(r);
+      } else {                                                                    // LP 바깥으로 완전히 빗나감 = '도로 밖'
+        breakCombo();
+      }
     }
+    // 33⅓ RPM 회전 — 박살난 LP 는 미친 듯이 돎
+    r.spin += dt * (r.smash > 0 ? 26 : LP_SPIN);
+    r.mesh.quaternion.setFromUnitVectors(_unitZ, pathFwd);
+    r.mesh.rotateZ(r.spin);
     if (r.portal > 0){                                                            // 통과 표시: 살짝만 커지며 페이드 (대쉬 착시 제거)
       r.portal = Math.min(1, r.portal + dt*3.0);
       r.mesh.scale.setScalar(1 + r.portal*0.4);
       r.mesh.material.opacity = 1 - r.portal;
+    }
+    if (r.smash > 0){                                                             // 박살: 커지며 흩어지듯 페이드
+      r.smash = Math.max(0, r.smash - dt*1.5);
+      const k = 1 - r.smash;
+      r.mesh.scale.set(1 + k*0.7, 1 + k*0.7, 1);
+      r.mesh.material.opacity = r.smash;
     }
   }
   lastS = sPlane;
@@ -798,15 +1000,18 @@ function update(dt) {
   renderer.toneMappingExposure = 1.2 + beatFlash*0.4;
 
   // camera — 부스트/오토시 캐릭터로 바짝 당겨 크게 (boostCam 보간 = 끊김 없음)
-  boostCam += (((boosting||autopilot)?1:0) - boostCam) * 0.08;                         // 부드럽게 (게이지 깜빡여도 안 튐)
-  _desired.set(0, 2.4 - 0.2*boostCam, 9 - 4.0*boostCam).applyQuaternion(plane.quaternion).add(plane.position);  // 9→5.0 (가까이갈때 거리)
-  camera.position.lerp(_desired, 0.1 + 0.45*boostCam);   // dt 평활화 덕에 빡세게 따라붙어도 안 떨림
+  boostCam += ((autopilot?1:0) - boostCam) * 0.08;                                     // 오토파일럿에서만 클로즈업
+  spdFov  += (((boosting && !autopilot)?1:0) - spdFov) * 0.18;                         // 수동 부스트는 빠르게 반응
+  _desired.set(0, 2.4 - 0.2*boostCam, 9 - 4.0*boostCam + 1.8*spdFov).applyQuaternion(plane.quaternion).add(plane.position);  // 부스트는 오히려 뒤로
+  camera.position.lerp(_desired, 0.1 + 0.45*boostCam + 0.16*spdFov);   // dt 평활화 덕에 빡세게 따라붙어도 안 떨림
   _headW.set(0, 1.2, 0.05).applyQuaternion(plane.quaternion).add(plane.position);      // 캐릭터(머리) 위치
   camTarget.copy(plane.position).addScaledVector(fwd, 12).lerp(_headW, boostCam*0.6);  // 부스트시 캐릭터로 프레이밍 (비행기 전체 보이게)
   camera.up.set(0,1,0).applyQuaternion(plane.quaternion).applyAxisAngle(fwd, bank*0.7);
   camera.lookAt(camTarget);
-  const baseFov = 92 - 6*boostCam;                                                     // 살짝 줌인(캐릭터 더 큼)
-  camera.fov += (baseFov - camera.fov)*0.08; camera.updateProjectionMatrix();
+  // ★ 부스트 = 화각 확대. 좁히면 눈엔 '느려짐'으로 읽혀서 실제 2.2배 속도가 상쇄됨
+  const baseFov = 92 - 6*boostCam + 17*spdFov;
+  camera.fov += (baseFov - camera.fov)*0.16; camera.updateProjectionMatrix();
+  speedEl.style.opacity = (spdFov * 0.85).toFixed(3);                                  // 가장자리 글로우
 
   // HUD
   updateBoostMeter();
