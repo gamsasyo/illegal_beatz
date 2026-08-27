@@ -690,6 +690,10 @@ addEventListener('keyup',   e => { keys[e.code]=false; });
 // ============================ flight state ============================
 let speed = 0.45; const baseSpeed = 0.45, boostSpeed = 1.0;   // 부스트 속도 80%로 낮춤 (1.25→1.0)
 let bank = 0, pitchV = 0, boosting = false;
+// ★ 진행방향에서 벗어날 수 있는 한계. 넘으면 초과분의 YAW_PULL 만큼씩 되돌아온다.
+//   하드 클램프(±0.7 딱 정지)는 부자연스러워서 스프링으로. 늘리면 더 자유롭게 돎.
+const YAW_SOFT = 1.15, PITCH_SOFT = 0.85, YAW_PULL = 0.09;
+const _fw = new THREE.Vector3();
 let autopilot = false;       // E 토글 치트 (알아서 패스 따라 슝슝)
 let cheatS = 0;              // 치트 레일 진행 좌표
 const BOOST_MAX = 2.5;        // 총 부스트 게이지 용량
@@ -832,6 +836,15 @@ function update(dt) {
     pitchV += (tp*1.2*dt - pitchV) * 0.1;
     plane.rotateY(bank * 1.8 * dt);
     plane.rotateX(pitchV);
+    // 진행방향에서 너무 벗어나면 살살 되돌림 — 하드 클램프가 아니라 스프링.
+    // 한계를 넘어선 만큼의 일부만 매 프레임 돌려놓으므로 벽처럼 딱 멈추지 않는다.
+    _fw.set(0,0,-1).applyQuaternion(plane.quaternion);
+    const yawOff = Math.atan2(_fw.dot(pathRight), _fw.dot(pathFwd));
+    const yEx = Math.abs(yawOff) - YAW_SOFT;
+    if (yEx > 0) plane.rotateY(Math.sign(yawOff) * yEx * YAW_PULL);
+    const pit = Math.asin(THREE.MathUtils.clamp(_fw.y, -1, 1));
+    const pEx = Math.abs(pit) - PITCH_SOFT;
+    if (pEx > 0) plane.rotateX(-Math.sign(pit) * pEx * YAW_PULL);
   }
   ship.rotation.z = bank * 1.1;               // 기체 시각적 롤(기울임)
 

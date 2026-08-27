@@ -191,6 +191,8 @@ function worldPosVarying(sh) {
 //   ★ 두 게임이 같은 A/D 를 받으므로 iframe 간 통신 없이 자동으로 같은 경로가 나온다.
 const CURV_MAX = 0.0022;        // ★ 휘는 정도. 올리면 건물이 심하게 기움 (dz² 라 멀수록 급증)
 const STEER_AUTH = 0.38;        // ★ 스케이터 자체 조향 비중. 1 이면 예전처럼 벽까지 밀림
+const BEND_FAR   = 170;         // ★ 이 거리까지만 커브. 너머는 직선 — 줄이면 먼 건물이 더 얌전해짐
+const CURV_LERP  = 0.022;       // ★ 곡률 반응 속도. 낮출수록 부드럽게 감김 (기존 0.045 는 급했음)
 let roadCurv = 0;
 const bendUniforms = [];
 const BEND_CHUNK = `
@@ -200,7 +202,10 @@ const BEND_CHUNK = `
   #endif
   vec4 bWP = modelMatrix * mvPosition;
   float bDZ = max( bWP.z - uBendZ, 0.0 );
-  bWP.x += 0.5 * uBendK * bDZ * bDZ;
+  // uBendFar 까지는 2차(진짜 커브), 그 너머는 접선 기울기로 직선 연장.
+  // 순수 dz² 로 두면 먼 건물이 방향키에 휙휙 휘둘린다 (거리 제곱으로 증폭)
+  float bD = min( bDZ, uBendFar );
+  bWP.x += 0.5 * uBendK * bD * bD + uBendK * uBendFar * ( bDZ - bD );
   mvPosition = viewMatrix * bWP;
   gl_Position = projectionMatrix * mvPosition;
 `;
@@ -212,8 +217,9 @@ function applyBend(mat) {
     if (prev) prev(sh, rnd);
     sh.uniforms.uBendK = { value: 0 };
     sh.uniforms.uBendZ = { value: 0 };
+    sh.uniforms.uBendFar = { value: BEND_FAR };
     bendUniforms.push(sh.uniforms);
-    sh.vertexShader = 'uniform float uBendK;\nuniform float uBendZ;\n' +
+    sh.vertexShader = 'uniform float uBendK;\nuniform float uBendZ;\nuniform float uBendFar;\n' +
       sh.vertexShader.replace('#include <project_vertex>', BEND_CHUNK);
   };
   // ★★ three 의 기본 캐시키는 onBeforeCompile.toString() 이다.
@@ -1659,7 +1665,7 @@ function loop(now) {
   for (let i = 0; i < roadUniforms.length; i++) roadUniforms[i].value = wrapZ;
   // 도로 곡률 — 1502행의 steer 와 같은 입력. A(왼쪽) → -x 방향으로 휨 (+x 가 오른쪽)
   const steerNow = autopilot ? aiSteer : (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
-  roadCurv += (steerNow * CURV_MAX - roadCurv) * 0.045;
+  roadCurv += (steerNow * CURV_MAX - roadCurv) * CURV_LERP;
   for (let i = 0; i < bendUniforms.length; i++) {
     bendUniforms[i].uBendK.value = roadCurv;
     bendUniforms[i].uBendZ.value = P.pos.z;
