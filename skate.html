@@ -183,6 +183,58 @@ function worldPosVarying(sh) {
     .replace('#include <begin_vertex>',
       '#include <begin_vertex>\n vWP=(modelMatrix*vec4(transformed,1.0)).xyz;\n vRZ = uWrap - position.y;');   // 도로/지면 회전(-90°)상 worldZ = posZ - localY → wrap해서 작게
 }
+
+// ───────────────────────── 월드 벤딩 (비행기가 꺾으면 도로가 휜다) ─────────────────────────
+// 월드 좌표계는 직선 그대로 두고 '그릴 때만' x 를 민다 — 아웃런/서브웨이서퍼 방식.
+//   → 배치·충돌·차선 로직 전부 무수정. blocked() / groundHeightAt() / LANES 가 그대로 작동한다.
+//   → 앞쪽만 휨 max(dz,0). 뒤쪽은 직선 유지 (뒤가 같이 휘면 잔상·고스트가 어긋나 보임)
+//   ★ 두 게임이 같은 A/D 를 받으므로 iframe 간 통신 없이 자동으로 같은 경로가 나온다.
+const CURV_MAX = 0.0022;        // ★ 휘는 정도. 올리면 건물이 심하게 기움 (dz² 라 멀수록 급증)
+const STEER_AUTH = 0.38;        // ★ 스케이터 자체 조향 비중. 1 이면 예전처럼 벽까지 밀림
+let roadCurv = 0;
+const bendUniforms = [];
+const BEND_CHUNK = `
+  vec4 mvPosition = vec4( transformed, 1.0 );
+  #ifdef USE_INSTANCING
+    mvPosition = instanceMatrix * mvPosition;
+  #endif
+  vec4 bWP = modelMatrix * mvPosition;
+  float bDZ = max( bWP.z - uBendZ, 0.0 );
+  bWP.x += 0.5 * uBendK * bDZ * bDZ;
+  mvPosition = viewMatrix * bWP;
+  gl_Position = projectionMatrix * mvPosition;
+`;
+function applyBend(mat) {
+  if (!mat || mat.userData.__bent) return;
+  mat.userData.__bent = true;
+  const prev = mat.onBeforeCompile;                 // 도로/지면은 이미 onBeforeCompile 이 있음 → 체인
+  mat.onBeforeCompile = (sh, rnd) => {
+    if (prev) prev(sh, rnd);
+    sh.uniforms.uBendK = { value: 0 };
+    sh.uniforms.uBendZ = { value: 0 };
+    bendUniforms.push(sh.uniforms);
+    sh.vertexShader = 'uniform float uBendK;\nuniform float uBendZ;\n' +
+      sh.vertexShader.replace('#include <project_vertex>', BEND_CHUNK);
+  };
+  // ★★ three 의 기본 캐시키는 onBeforeCompile.toString() 이다.
+  //   모든 머티리얼을 '똑같이 생긴' 래퍼로 감싸면(prev 는 클로저라 소스에 안 나옴)
+  //   도로·지면·건물이 전부 같은 키가 되어 프로그램 하나를 공유 → 먼저 컴파일된 셰이더가
+  //   나머지를 덮어쓴다. (차선·창문 불빛이 통째로 사라졌던 원인)
+  //   → 감싸기 전 원본 함수의 소스로 키를 잡아 원래 같던 것끼리만 공유되게 한다.
+  const origKey = prev ? prev.toString() : 'none';
+  mat.customProgramCacheKey = function () { return origKey + '|bent'; };
+  mat.needsUpdate = true;
+}
+// 정점이 옆으로 밀려도 바운딩스피어는 그대로라 컬링이 오작동(멀리서 사라짐) → 끔
+function bendScene() {
+  scene.traverse(o => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    const m = o.material;
+    if (Array.isArray(m)) m.forEach(applyBend); else applyBend(m);
+  });
+}
+
 // 도로: 아스팔트 + 중앙 점선(흰) + 차선(흰) + 영국 이중 황색선 + 횡단보도(지브라)
 function roadShader(mat) {
   mat.onBeforeCompile = (sh) => { worldPosVarying(sh);
@@ -1501,7 +1553,10 @@ function update(dt) {
       if (!autopilot && keys.KeyS) P.vel -= ACCEL * 1.3 * dt;
       const steer = autopilot ? aiSteer : (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
       const auth = autopilot ? 1 : Math.min(1, Math.abs(P.vel) / 6 + 0.15);  // 오토는 저속에서도 잘 꺾임
-      P.yaw += steer * TURN * dt * auth;
+      // 방향 전환은 도로 곡률이 담당. 스케이터 조향은 차선 회피용 미세조정만 남긴다.
+      // (안 줄이면 A 를 누를 때 도로도 휘고 스케이터도 밀려서 건물에 처박힘)
+      P.yaw += steer * TURN * dt * auth * STEER_AUTH;
+      P.yaw += (0 - P.yaw) * 1.6 * dt;                     // 서서히 도로와 나란해짐(셀프 센터링)
       P.yaw = THREE.MathUtils.clamp(P.yaw, -0.7, 0.7);   // 항상 앞으로 (도로 안 좌우만)
     }
     // 경사 모멘텀 — 내리막 가속 / 오르막 감속 (다운힐 속도감)
@@ -1591,6 +1646,7 @@ function update(dt) {
 
 let last = performance.now();
 let _lastW = 0, _lastH = 0;
+let frameN = 0;
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   const cw = document.documentElement.clientWidth, ch = document.documentElement.clientHeight;
@@ -1601,6 +1657,14 @@ function loop(now) {
   road.position.set(0, 0.06, P.pos.z);   // 바닥 위로 확실히 띄움(삐져나옴/z-fight 방지)
   const wrapZ = ((P.pos.z % ROAD_WRAP) + ROAD_WRAP) % ROAD_WRAP;       // 도로 무늬 z wrap(멀리서 선 사라짐 방지)
   for (let i = 0; i < roadUniforms.length; i++) roadUniforms[i].value = wrapZ;
+  // 도로 곡률 — 1502행의 steer 와 같은 입력. A(왼쪽) → -x 방향으로 휨 (+x 가 오른쪽)
+  const steerNow = autopilot ? aiSteer : (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
+  roadCurv += (steerNow * CURV_MAX - roadCurv) * 0.045;
+  for (let i = 0; i < bendUniforms.length; i++) {
+    bendUniforms[i].uBendK.value = roadCurv;
+    bendUniforms[i].uBendZ.value = P.pos.z;
+  }
+  if ((frameN++ % 30) === 0) bendScene();          // 재생성된 오브젝트의 새 머티리얼도 물림
   deformSurface(ground);
   deformSurface(road);
   renderer.render(scene, camera);
@@ -1609,6 +1673,7 @@ function loop(now) {
 
 // ───────────────────────── boot ─────────────────────────
 buildSkateSpot();                                    // 끝없는 야간 도시 생성
+bendScene();                                          // 모든 머티리얼에 벤딩 주입
 initBeacons();                                        // 벨리샤 비콘 풀 생성
 $('#load').textContent = 'NIGHT CITY READY';
 const AUTO = /[?&]autostart/.test(location.search);   // 듀얼 모드: 클릭 없이 자동 시작
