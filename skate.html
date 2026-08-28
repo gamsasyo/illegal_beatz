@@ -1148,6 +1148,7 @@ function setAfterimageOpacity(g, op) {
 }
 // (cine) 하이라이트 잔상 — 짧고 진하게 (원본색이라 폭발 없음)
 const GHOST_N = 8;
+const GHOST_CINE_OP = 0.22;   // ★ 하이라이트(슬로우) 중 잔상 불투명도 (평소 0.6)
 const GHOSTS = [];
 for (let i = 0; i < GHOST_N; i++) { const g = buildAfterimage(); g.userData.life = 0; scene.add(g); GHOSTS.push(g); }
 let _ghostIdx = 0;
@@ -1160,7 +1161,7 @@ function updateGhosts(dt) {                            // 잔상 페이드아웃
   for (const g of GHOSTS) if (g.visible) {
     g.userData.life -= dt * 2.4;                       // 수명 ~0.4초
     if (g.userData.life <= 0) g.visible = false;
-    else setAfterimageOpacity(g, g.userData.life * 0.6);
+    else setAfterimageOpacity(g, g.userData.life * (cine.active ? GHOST_CINE_OP : 0.6));   // 슬로우 중엔 보드 안 가리게 옅게
   }
 }
 // 콤보가 길어지면 평상시에도 트레일 — 동일하게 원본색 잔상 (페이더로 조절)
@@ -1227,7 +1228,7 @@ function cineCam(dt) {                                  // 실제(슬로우모�
   if (t >= 1) { cine.active = false; cine.cd = 3.5; $('#cine').classList.remove('on');
     skater.userData.boardPivot.position.set(0, 0.22, 0);              // 보드 위치 복귀 (그랩은 grabAmt 가 알아서 풀림)
     camera.fov = 74; camera.updateProjectionMatrix(); return false; }   // FOV 원복
-  // 잔상 없음 — 슬로우모션 중 고스트가 보드(ILLEGAL BEATZ)를 가려서 뺐음
+  if (t - cine.lastStamp >= 0.05) { cine.lastStamp = t; stampGhost(); }  // 잔상 (슬로우 중엔 더 투명 — updateGhosts)
   const b = Math.sin(Math.PI * t);                     // 0→1→0 : 체이스 → 궤도 → 체이스 (부드럽게)
 
   // ── 보드 리빌: 캐릭터가 보드에서 점프하고, 보드가 카메라로 돌아 그립(illegal beatz) 클로즈업 ──
