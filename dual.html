@@ -366,10 +366,13 @@
   const AUTO_TAPS = 10, TAP_MAX_GAP = 1.2;
   let taps = [], invAuto = 0, invNextBeat = 0, invPrev = false;
   // L2 = 크루 얼굴 셋이 번갈아 (SAWTEETH → SHINS → BEAUTIFUL DISCO). 흰 바탕, 프레임 높이의 62%
-  const FX_FACES = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
-    const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u;
-    return "#fff url('" + u + "') center / auto 62% no-repeat";
+  // 흰 바탕 없이 얼굴만 (뒤에 게임 비침). 번쩍일 때마다 FACE_MIN → FACE_MAX 로 커지고, 다음 얼굴에서 다시 작게
+  const FACE_URLS = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
+    const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u; return u;
   });
+  const FACE_MIN = 22, FACE_MAX = 96;                // 프레임 높이 % 
+  const faceBg = (i, k) => "transparent url('" + FACE_URLS[i] + "') center / auto " +
+    (FACE_MIN + (FACE_MAX - FACE_MIN) * k / (FACE_REPEAT - 1)).toFixed(1) + "% no-repeat";
   const $fx = document.getElementById('fx'), $wrap = document.querySelector('.wrap');
 
   function fxRead(b, ax) {
@@ -414,7 +417,10 @@
     // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
     let bg = FX_LOGOS[0], op = 0, fxInv = 0;
     const ph = Math.floor(t / 1000 * strobeHz * 2);          // 반주기 카운터 (홀수 = 켜짐)
-    if (fxOn.faces) { bg = FX_FACES[Math.floor(ph / 2 / FACE_REPEAT) % 3]; op = (ph % 2) ? 1 : 0; }   // 얼굴 하나당 FACE_REPEAT 번
+    if (fxOn.faces) {                                            // 얼굴 하나당 FACE_REPEAT 번, 점점 커짐
+      const n = Math.floor(ph / 2);
+      bg = faceBg(Math.floor(n / FACE_REPEAT) % 3, n % FACE_REPEAT); op = (ph % 2) ? 1 : 0;
+    }
     else if (fxOn.strobe) { op = (ph % 2) ? 1 : 0; const k = Math.floor(ph / 2) % 2; bg = FX_LOGOS[k]; fxInv = k; }   // 짝수번째 정상/왼쪽, 홀수번째 반전/오른쪽
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
     if (bg !== fxBgNow) { fxBgNow = bg; $fx.style.background = bg; }   // 매 프레임 background 재설정 방지
