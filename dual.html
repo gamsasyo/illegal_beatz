@@ -353,8 +353,8 @@
   // L1 로고 스트로브 — 누를 때마다 셋 중 랜덤 (직전 것과는 다르게). 흰 바탕.
   // L1 = BEAUTIFUL DISCO 로고 스트로브. 번쩍일 때마다 정상(왼쪽으로) ↔ 반전(오른쪽으로) 교차
   const FX_LOGOS = [
-    "#fff url('bitmap/Brick.png') 22% center / 64% auto no-repeat",   // 정상: 검정 로고, 왼쪽
-    "#fff url('bitmap/Brick.png') 78% center / 64% auto no-repeat",   // 반전: filter 로 뒤집음, 오른쪽
+    "#fff url('bitmap/Brick.png') center / 72% auto no-repeat",   // 정상: 검정 로고
+    "#fff url('bitmap/Brick.png') center / 72% auto no-repeat",   // 반전: filter 로 뒤집음 (같은 자리)
   ];
   new Image().src = 'bitmap/Brick.png';
   let logoIdx = 0, fxBgNow = '', strobePrev = false, fxInvNow = -1;
