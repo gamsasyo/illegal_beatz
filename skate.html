@@ -1034,7 +1034,7 @@ const P = {
   board: { flip: 0, target: 0, shuv: 0, shuvTarget: 0, amt: 0 },   // flip=킥플립(Z), shuv=셔빗(Y), amt=발 들기 블렌드
 };
 // ★ 점프 감 — 평지 올리는 짧고 탁(GRAV 32/JUMP 9.5: 체공 0.6s), 램프는 rampLaunch 에서 따로 크게
-const GRAV = 32, JUMP = 9.5, ACCEL = 11, MAXSPD = 22, FRICTION = 4;
+const GRAV = 29, JUMP = 10.2, ACCEL = 11, MAXSPD = 22, FRICTION = 4;   // 26/11(길다) 과 32/9.5(짧다) 사이
 // ★ 차선 목표 노브 — LANE_MAX 는 트릭 존 한계(킥커 ±2 폭≤14, 레일 ±5.5, 차선 9 안쪽)
 const LANE_MAX = 7.5, LANE_RATE = 22, IDLE_T = 2.0, CRUISE_MIN = MAXSPD * 0.55;   // ★ LANE_RATE = 방향키 감도
 const DOWNHILL_CAP = 1.2;   // ★ 내리막 최고속 배율 (MAXSPD 22 × 1.2 = 26). 1.7 은 너무 빨랐음
@@ -1209,8 +1209,8 @@ function tryCine() {
   const style = (combo.mult - CINE_MULT_AIR) + Math.max(0, h - CINE_MIN_HEIGHT) * 0.5;
   cine.dur = THREE.MathUtils.clamp(1.0 + style * 0.13, 1.0, 2.6);
   cine.active = true; cine.t = 0; cine.lastStamp = -1; P.cineDone = true;
-  cine.board = Math.random() < 0.5;                    // 절반은 보드 리빌(그립 illegal beatz 보여주기)
-  cine.boardTight = cine.board && Math.random() < 0.55;   // 그 중 절반쯤은 로고 화면 가득 클로즈업
+  cine.board = true;                                   // 항상 보드 리빌 (그립 ILLEGAL BEATZ 를 카메라로) — 파티에서 로고 노출
+  cine.boardTight = Math.random() < 0.6;               // 60% 는 로고 화면 가득 클로즈업
   $('#cine').classList.add('on');
 }
 const _cChase = new THREE.Vector3(), _cOrbit = new THREE.Vector3();

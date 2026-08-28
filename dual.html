@@ -370,7 +370,7 @@
   const FACE_URLS = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
     const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u; return u;
   });
-  const FACE_MIN = 22, FACE_MAX = 96;                // 프레임 높이 % 
+  const FACE_MIN = 22, FACE_MAX = 175;               // 프레임 높이 %. 100 넘으면 화면 밖으로 넘쳐 나감 (마지막 서너 번)
   const faceBg = (i, k) => "transparent url('" + FACE_URLS[i] + "') center / auto " +
     (FACE_MIN + (FACE_MAX - FACE_MIN) * k / (FACE_REPEAT - 1)).toFixed(1) + "% no-repeat";
   const $fx = document.getElementById('fx'), $wrap = document.querySelector('.wrap');
