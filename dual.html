@@ -81,7 +81,7 @@
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
-  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>반전(킥) <b>L2</b>얼굴 &nbsp;·&nbsp; <b>L2+R2</b> 오토파일럿</div>
+  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>반전(킥) <b>L2</b>얼굴 &nbsp;·&nbsp; <b>R1+R2</b> 오토파일럿</div>
   <div class="st" id="st">MANUAL</div>
   <div class="fx" id="fxst"></div>
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
@@ -288,8 +288,8 @@
     if (lx < -DEAD) want.KeyA = true;
     if (lx >  DEAD) want.KeyD = true;
 
-    // L2 + R2 동시 = 오토파일럿 토글 (OPTIONS 와 같은 기능). 두 개가 같이 눌리는 순간에만 한 번
-    const chord = !!(b[6] && b[6].pressed && b[7] && b[7].pressed);
+    // R1 + R2 동시 = 오토파일럿 토글 (OPTIONS 와 같은 기능). 두 개가 같이 눌리는 순간에만 한 번
+    const chord = !!(b[5] && b[5].pressed && b[7] && b[7].pressed);
     if (chord && !chordPrev) { padSend('KeyE', true); setTimeout(() => padSend('KeyE', false), 40); }
     chordPrev = chord;
     for (const s in want) padSend(s, want[s]);
