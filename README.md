@@ -62,3 +62,24 @@ ILLEGAL BEATZ hoodie — party-night exclusive.
 ---
 
 _ILLEGAL BEATZ · PLANET TURBO SEOUL_
+
+
+## Party setup (two projectors, one PS controller)
+
+Double-click **`party.command`** — it starts the local server and opens two Chrome
+windows, `dual.html?side=skate` and `dual.html?side=flight`, one per projector.
+In each window: click → **F** (fullscreen) → press ✕ on the pad.
+
+Manual equivalent:
+
+```
+python3 -m http.server 8899
+open http://localhost:8899/dual.html?side=skate     # projector 1
+open http://localhost:8899/dual.html?side=flight    # projector 2
+```
+
+Keys inside a window: **M** frame adjust (+/− scale, arrows move, R reset, saved per
+window) · **H** hide HUD · **P** pad debug/FPS. Pad: stick = move, ✕ jump/boost,
+△□○R2 tricks, L1 logo strobe, L2 face strobe, R1 invert (tap tempo ×10 = auto),
+R1+R2 or OPTIONS = autopilot. Windows share input over BroadcastChannel, so the
+pad only needs to be seen by one of them.
