@@ -371,6 +371,9 @@
       }
       applyFrame();
     }
+    // 프로젝터가 뒤집혀 있을 때: 180° 회전 / 좌우 반전 (프레임 안에서만)
+    const rot = +c[fk + 'rot'] ? 180 : 0, mir = +c[fk + 'mir'] ? -1 : 1;
+    $wrapEl.style.transform = (rot || mir < 0) ? `rotate(${rot}deg) scaleX(${mir})` : '';
     const r = c.mixR ?? 1, g = c.mixG ?? 1, b = c.mixB ?? 1;
     document.getElementById('mixM').setAttribute('values', `${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`);
     const mixOn = !(r === 1 && g === 1 && b === 1);

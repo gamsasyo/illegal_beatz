@@ -37,12 +37,14 @@
     <div class="row"><label>세로 크기</label><input type="range" data-k="fr.skate.h" min="10" max="160" step="0.5" value="100"><output>100</output></div>
     <div class="row"><label>좌우 위치</label><input type="range" data-k="fr.skate.x" min="-60" max="60" step="0.5" value="0"><output>0</output></div>
     <div class="row"><label>상하 위치</label><input type="range" data-k="fr.skate.y" min="-60" max="60" step="0.5" value="0"><output>0</output></div>
+    <div class="btns"><button class="tog" data-k="fr.skate.rot">180° 뒤집기</button><button class="tog" data-k="fr.skate.mir">좌우 반전</button></div>
   </div>
   <div class="box"><h2>🎯 🛸 FLIGHT 프레임 (프로젝터 창 %) <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="row"><label>가로 크기</label><input type="range" data-k="fr.flight.w" min="10" max="160" step="0.5" value="100"><output>100</output></div>
     <div class="row"><label>세로 크기</label><input type="range" data-k="fr.flight.h" min="10" max="160" step="0.5" value="100"><output>100</output></div>
     <div class="row"><label>좌우 위치</label><input type="range" data-k="fr.flight.x" min="-60" max="60" step="0.5" value="0"><output>0</output></div>
     <div class="row"><label>상하 위치</label><input type="range" data-k="fr.flight.y" min="-60" max="60" step="0.5" value="0"><output>0</output></div>
+    <div class="btns"><button class="tog" data-k="fr.flight.rot">180° 뒤집기</button><button class="tog" data-k="fr.flight.mir">좌우 반전</button></div>
   </div>
   <div class="box" data-side="skate"><h2>🛹 SKATE 톤 <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="row"><label>HUE</label><input type="range" data-k="skate.hue" min="-180" max="180" value="0"><output>0</output></div>
@@ -114,6 +116,7 @@
       else if (el.type === 'range') o.textContent = v;
     }
     document.getElementById('black').classList.toggle('on', ctl.black);
+    if (typeof paintTog === 'function') paintTog();
   }
   function send() {
     try { localStorage.setItem(KEY, JSON.stringify(ctl)); } catch (_) {}
@@ -123,6 +126,12 @@
   for (const el of els) el.addEventListener('input', () => {
     ctl[el.dataset.k] = el.type === 'range' ? +el.value : el.value; paint(); send();
   });
+  // 토글 버튼 (data-k 가 0/1)
+  document.querySelectorAll('button.tog').forEach(bt => {
+    defaults[bt.dataset.k] = 0; if (ctl[bt.dataset.k] === undefined) ctl[bt.dataset.k] = 0;
+    bt.addEventListener('click', () => { ctl[bt.dataset.k] = ctl[bt.dataset.k] ? 0 : 1; paint(); send(); });
+  });
+  const paintTog = () => document.querySelectorAll('button.tog').forEach(bt => bt.classList.toggle('on', !!ctl[bt.dataset.k]));
   document.querySelectorAll('[data-mix]').forEach(bt => bt.addEventListener('click', () => {
     const [r, g, b] = bt.dataset.mix.split(',').map(Number); ctl.mixR = r; ctl.mixG = g; ctl.mixB = b; paint(); send();
   }));
