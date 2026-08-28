@@ -65,6 +65,7 @@
   /* FX 오버레이 — 두 판 위를 한꺼번에 덮음 (HUD 위, 부팅화면 아래) */
   /* .wrap 안에 있어서 프레임(캔버스) 영역에만 번쩍임 — 바깥 검정은 그대로 */
   #fx { position: absolute; inset: 0; z-index: 25; pointer-events: none; opacity: 0; }
+  #mixov { position: absolute; inset: 0; z-index: 20; pointer-events: none; mix-blend-mode: multiply; display: none; }
   .wrap { transition: none; }
   #hud .fx { font-size: 11px; margin-top: 2px; letter-spacing: 2px; color: #ff8adf; min-height: 17px; }
   /* 클린 모드 — 파티용. H 로 토글 */
@@ -83,6 +84,7 @@
     <iframe id="a" data-src="skate.html?autostart=1&dual=1" title="skate"></iframe></div>
   <div class="pane"><div class="tag r">✈ FLIGHT</div>
     <iframe id="b" data-src="flight.html?autostart=1&dual=1" title="flight"></iframe></div>
+  <div id="mixov"></div>
   <div id="fx"></div>
   <div id="frameHud"></div>
 </div>
@@ -408,9 +410,12 @@
     if (c[fk + 'corner'] !== undefined && +c[fk + 'corner'] !== cornerCtlSeen) { cornerCtlSeen = +c[fk + 'corner']; setCorner(!!cornerCtlSeen); }
     if (c[fk + 'cornerReset'] && c[fk + 'cornerReset'] !== cornerResetSeen) { cornerResetSeen = c[fk + 'cornerReset']; corners = null; applyFrame(); }
     const r = c.mixR ?? 1, g = c.mixG ?? 1, b = c.mixB ?? 1;
-    document.getElementById('mixM').setAttribute('values', `${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`);
+    // 채널 믹스 = 색 오버레이 × multiply (R,G,B 게인 0~1). SVG feColorMatrix 는 iframe 위에서 안 먹어서 교체
     const mixOn = !(r === 1 && g === 1 && b === 1);
-    const tone = side => `hue-rotate(${c[side + '.hue'] || 0}deg) saturate(${c[side + '.sat'] ?? 1}) contrast(${c[side + '.con'] ?? 1}) brightness(${c[side + '.bri'] ?? 1})` + (mixOn ? ' url(#mix)' : '');
+    const mo = document.getElementById('mixov');
+    mo.style.display = mixOn ? 'block' : 'none';
+    mo.style.background = `rgb(${Math.round(255 * Math.min(1, r))}, ${Math.round(255 * Math.min(1, g))}, ${Math.round(255 * Math.min(1, b))})`;
+    const tone = side => `hue-rotate(${c[side + '.hue'] || 0}deg) saturate(${c[side + '.sat'] ?? 1}) contrast(${c[side + '.con'] ?? 1}) brightness(${c[side + '.bri'] ?? 1})`;
     const fa = document.getElementById('a'), fb = document.getElementById('b');
     if (fa) fa.parentElement.style.filter = tone('skate');
     if (fb) fb.parentElement.style.filter = tone('flight');
