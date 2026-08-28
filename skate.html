@@ -1119,7 +1119,7 @@ function updateScore() {
 }
 
 // ───────────────────────── cinematic highlight (슬로우모션 360 궤도) ─────────────────────────
-const cine = { active: false, t: 0, dur: 2.2, slowmo: 0.22, cd: 0, lastStamp: -1, board: false, boardTight: false };
+const cine = { active: false, t: 0, dur: 2.2, slowmo: 0.12, cd: 0, lastStamp: -1, board: false, boardTight: false };
 const CINE_MULT_FLASHY = 8;                            // (B) 현란한 콤보 — 높이 무관 발동
 const CINE_MULT_AIR    = 4;                            // (A) 큰 점프와 함께 요구되는 최소 콤보
 const CINE_MIN_HEIGHT  = 3.5;                          // (A) '일정 높이 이상' 점프 기준(m) — 기본 올리(2.3m)로는 안 닿음
@@ -1211,7 +1211,7 @@ function tryCine() {
   if (!flashy && !bigAir) return;
   // 간지(콤보 배수 + 점프 높이)에 비례해 하이라이트 길이 차등 — 평범하면 짧게, 미친 라인이면 길게
   const style = (combo.mult - CINE_MULT_AIR) + Math.max(0, h - CINE_MIN_HEIGHT) * 0.5;
-  cine.dur = THREE.MathUtils.clamp(1.0 + style * 0.13, 1.0, 2.6);
+  cine.dur = THREE.MathUtils.clamp(1.6 + style * 0.16, 1.6, 3.4);   // 더 길게 (슬로우 0.12 와 함께 '더 슬로우하게')
   cine.active = true; cine.t = 0; cine.lastStamp = -1; P.cineDone = true;
   for (const g of GHOSTS) { g.visible = false; g.userData.life = 0; }   // 남아있던 잔상도 정리
   cine.board = true;                                   // 항상 보드 리빌 (그립 ILLEGAL BEATZ 를 카메라로) — 파티에서 로고 노출
@@ -1225,33 +1225,38 @@ function cineCam(dt) {                                  // 실제(슬로우모�
   cine.t += dt / cine.dur;
   const t = cine.t;
   if (t >= 1) { cine.active = false; cine.cd = 3.5; $('#cine').classList.remove('on');
-    skater.userData.hipRoot.position.y = skater.userData.hipY;          // 점프 복귀
-    skater.userData.hipRoot.position.z = skater.userData.hipZ || 0;
+    skater.userData.boardPivot.position.set(0, 0.22, 0);              // 보드 위치 복귀 (그랩은 grabAmt 가 알아서 풀림)
     camera.fov = 74; camera.updateProjectionMatrix(); return false; }   // FOV 원복
   // 잔상 없음 — 슬로우모션 중 고스트가 보드(ILLEGAL BEATZ)를 가려서 뺐음
   const b = Math.sin(Math.PI * t);                     // 0→1→0 : 체이스 → 궤도 → 체이스 (부드럽게)
 
   // ── 보드 리빌: 캐릭터가 보드에서 점프하고, 보드가 카메라로 돌아 그립(illegal beatz) 클로즈업 ──
   if (cine.board) {
-    const hipRoot = skater.userData.hipRoot, bp = skater.userData.boardPivot, tight = cine.boardTight;
-    skater.rotation.set(P.flip * (1 - b), P.yaw + P.spin * (1 - b), P.roll * (1 - b));   // 스핀/플립 잠재워 보드 안정
-    bp.rotation.set(-0.175 * b, P.board.shuv + 1.22 * b, 0);   // 긴축을 약 20° 대각선으로(완전 수평 아님), 살짝 기울여 그립이 위로
-    // 캐릭터를 보드보다 '앞'(카메라 반대쪽)으로 밀고 더 높이 — 카메라가 뒤·위에서 보드를 보므로
-    // 캐릭터가 카메라와 보드 사이에 끼어 ILLEGAL BEATZ 를 가리지 않는다
-    hipRoot.position.y = skater.userData.hipY + b * (tight ? 6.5 : 5.5);   // 프레임 밖으로 완전히
-    hipRoot.position.z = (skater.userData.hipZ || 0) + b * 3.2;
+    const bp = skater.userData.boardPivot, tight = cine.boardTight;
+    // ── 캐릭터가 보드를 손으로 들어 카메라에 보여준다 (점프해서 빠지는 대신) ──
+    skater.rotation.set(P.flip * (1 - b), P.yaw + P.spin * (1 - b), P.roll * (1 - b));   // 스핀/플립 잠재워 안정
+    P.grab = 'indy'; P.grabT = 0.6;                    // 그랩 포즈 유지 (grabAmt → 1, 손이 보드로)
+    // 보드를 가슴 앞으로 들어올리고 그립(ILLEGAL BEATZ)이 얼굴 정면(+z)을 향하게 세움
+    bp.position.y = 0.22 + 0.45 * P.grabAmt + 0.55 * b;
+    bp.position.z = 0.35 * b;
+    bp.rotation.set(-1.25 * b, P.board.shuv * (1 - b), 0);   // 긴축 그대로, 그립면을 앞으로 (약 72°)
     skater.updateMatrixWorld(true);
-    bp.getWorldPosition(_head);                        // 보드 위치(_head 재사용)
+    bp.getWorldPosition(_head);                        // 보드 위치(_head 재용)
+    // 카메라: 뒤에서 → 캐릭터 '앞쪽' 3/4 로 돌아 들어와 보드를 정면에서 봄 (캐릭터 몸은 보드 뒤)
+    _faceDir.set(0, 0, 1).applyQuaternion(skater.getWorldQuaternion(_q)); _faceDir.y = 0;
+    if (_faceDir.lengthSq() < 1e-4) _faceDir.set(Math.sin(P.yaw), 0, Math.cos(P.yaw));
+    _faceDir.normalize();
+    const faceAz = Math.atan2(_faceDir.x, _faceDir.z);
+    const camAz = faceAz + (t - 0.5) * Math.PI * 0.8;  // 정면 기준 ±72° 스윕 (클라이맥스 = 정면)
+    const R = tight ? 2.0 : 2.7, lift = tight ? 0.35 : 0.7;
+    _cOrbit.set(_head.x + Math.sin(camAz) * R, _head.y + lift, _head.z + Math.cos(camAz) * R);
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
-    const H = tight ? 2.5 : 3.4, back = tight ? 1.9 : 2.6;   // 위에서 비스듬히 내려봄(3/4 부감) → 보드 수평으로 읽힘
     _cChase.set(P.pos.x - sy * 9, P.y + 4.5, P.pos.z - cy * 9);
-    _cOrbit.set(_head.x - sy * back, _head.y + H, _head.z - cy * back);   // tight=보드에 바짝
     camera.position.lerpVectors(_cChase, _cOrbit, b);
     _chaseLook.set(P.pos.x, P.y + 1.4, P.pos.z);
-    _faceDir.set(_head.x, _head.y, _head.z);           // 보드 정중앙(로고) 정조준
-    _look.lerpVectors(_chaseLook, _faceDir, b);
+    _look.lerpVectors(_chaseLook, _head, b);           // 보드 정중앙(로고) 정조준
     camera.lookAt(_look);
-    camera.fov = 74 - b * (tight ? 20 : 10); camera.updateProjectionMatrix();   // tight=줌인(로고 가득하되 다 보이게)
+    camera.fov = 74 - b * (tight ? 22 : 12); camera.updateProjectionMatrix();
     return true;
   }
   // 실제 머리(지구본) 월드 좌표 + 얼굴이 향하는 실제 방향(스핀/플립 반영)
