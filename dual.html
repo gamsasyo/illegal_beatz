@@ -81,7 +81,7 @@
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
-  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>반전 <b>L2</b>얼굴 &nbsp;·&nbsp; <b>L2+R2</b> 오토파일럿</div>
+  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>반전(킥) <b>L2</b>얼굴 &nbsp;·&nbsp; <b>L2+R2</b> 오토파일럿</div>
   <div class="st" id="st">MANUAL</div>
   <div class="fx" id="fxst"></div>
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
@@ -348,14 +348,17 @@
   const fxOn = { strobe:false, invert:false, faces:false, hue:false };
   let strobeHz = 12, flashUntil = 0, tapPrev = {};
   // L1 로고 스트로브 — 누를 때마다 셋 중 랜덤 (직전 것과는 다르게). 흰 바탕.
+  // L1 = BEAUTIFUL DISCO 로고 스트로브. 번쩍일 때마다 정상(왼쪽으로) ↔ 반전(오른쪽으로) 교차
   const FX_LOGOS = [
-    "#fff url('bitmap/Brick.png') center / 72% auto no-repeat",          // BEAUTIFUL DISCO (가로형: 폭 72%)
-    "#fff url('bitmap/planet_turbo.png') center / auto 74% no-repeat",   // PLANET TURBO (정사각: 높이 74%)
-    "#fff url('bitmap/jungleF.png') center / auto 74% no-repeat",        // jungleF
+    "#fff url('bitmap/Brick.png') 22% center / 64% auto no-repeat",   // 정상: 검정 로고, 왼쪽
+    "#fff url('bitmap/Brick.png') 78% center / 64% auto no-repeat",   // 반전: filter 로 뒤집음, 오른쪽
   ];
-  ['Brick', 'planet_turbo', 'jungleF'].forEach(n => { new Image().src = 'bitmap/' + n + '.png'; });   // 미리 로드
-  let logoIdx = 0, fxBgNow = '', strobePrev = false;
+  new Image().src = 'bitmap/Brick.png';
+  let logoIdx = 0, fxBgNow = '', strobePrev = false, fxInvNow = -1;
   const FACE_REPEAT = 10;                          // L2: 얼굴 하나당 번쩍이는 횟수
+  // R1 반전 = 킥 엔벨로프. 누르면 즉시 100%, 떼면 INV_DECAY 초에 걸쳐 빠져나감 (지수 감쇠)
+  const INV_DECAY = 0.45;
+  let invAmt = 0, fxLastT = performance.now();
   // L2 = 크루 얼굴 셋이 번갈아 (SAWTEETH → SHINS → BEAUTIFUL DISCO). 흰 바탕, 프레임 높이의 62%
   const FX_FACES = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
     const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u;
@@ -380,23 +383,24 @@
   let fxLastSig = '';
 
   // L1 이 눌리는 순간마다 로고를 새로 뽑는다 (직전과 다른 것)
-  function pickLogo(on) {
-    if (on && !strobePrev) { let n; do { n = (Math.random() * FX_LOGOS.length) | 0; } while (n === logoIdx); logoIdx = n; }
-    strobePrev = on;
-  }
+  function pickLogo(on) { strobePrev = on; }   // (랜덤 로고 선택은 폐기 — 교차 표시로 대체)
   function fxDraw() {
     const t = performance.now();
     // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
-    let bg = FX_LOGOS[logoIdx], op = 0;
+    let bg = FX_LOGOS[0], op = 0, fxInv = 0;
     const ph = Math.floor(t / 1000 * strobeHz * 2);          // 반주기 카운터 (홀수 = 켜짐)
     if (fxOn.faces) { bg = FX_FACES[Math.floor(ph / 2 / FACE_REPEAT) % 3]; op = (ph % 2) ? 1 : 0; }   // 얼굴 하나당 FACE_REPEAT 번
-    else if (fxOn.strobe) op = (ph % 2) ? 1 : 0;
+    else if (fxOn.strobe) { op = (ph % 2) ? 1 : 0; const k = Math.floor(ph / 2) % 2; bg = FX_LOGOS[k]; fxInv = k; }   // 짝수번째 정상/왼쪽, 홀수번째 반전/오른쪽
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
     if (bg !== fxBgNow) { fxBgNow = bg; $fx.style.background = bg; }   // 매 프레임 background 재설정 방지
+    if (fxInv !== fxInvNow) { fxInvNow = fxInv; $fx.style.filter = fxInv ? 'invert(1)' : ''; }
     $fx.style.opacity = op;
 
+    const dtF = Math.min(0.1, (t - fxLastT) / 1000); fxLastT = t;
+    if (fxOn.invert) invAmt = 1; else invAmt *= Math.exp(-dtF / (INV_DECAY / 3));   // 3τ ≈ INV_DECAY 에서 5%
+    if (invAmt < 0.02) invAmt = 0;
     const f = [];
-    if (fxOn.invert) f.push('invert(1)');
+    if (invAmt > 0) f.push('invert(' + invAmt.toFixed(3) + ')');
     if (fxOn.hue) f.push('hue-rotate(' + Math.floor(t / 6 % 360) + 'deg) saturate(2.5)');
     $wrap.style.filter = f.join(' ');
 
