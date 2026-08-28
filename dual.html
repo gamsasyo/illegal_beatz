@@ -177,7 +177,10 @@
   if (relay) relay.onmessage = ({ data }) => {
     window.__relay.rx++;
     document.getElementById('boot').classList.add('hidden');            // 다른 창이 시작했으면 이 창도 시작
-    if (data.t === 'fx') { if (!padId) { Object.assign(fxOn, data.on); strobeHz = data.hz; } return; }
+    if (data.t === 'fx') {
+      if (!padId) { tapInvert(!!data.on.invert); pickLogo(!!data.on.strobe); Object.assign(fxOn, data.on); strobeHz = data.hz; }   // 탭템포도 같이 계산
+      return;
+    }
     if (data.src === 'pad' && padId) return;                              // 내 패드가 있으면 중복
     forward(data.t, { code: data.code, key: data.key, repeat: data.repeat, preventDefault(){} }, true);
   };
