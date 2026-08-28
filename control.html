@@ -11,7 +11,8 @@
   .sub { color: #6b7f9e; font-size: 11px; margin-bottom: 18px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
   .box { border: 1px solid #1f2c4a; border-radius: 10px; padding: 14px 16px; background: #0f1322; }
-  .box h2 { font-size: 11px; letter-spacing: 3px; color: #7df0ff; margin: 0 0 12px; }
+  .box h2 { font-size: 11px; letter-spacing: 3px; color: #7df0ff; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; }
+  .box h2 .rst { padding: 3px 8px; font-size: 10px; letter-spacing: 1px; }
   .row { display: grid; grid-template-columns: 96px 1fr 52px; gap: 10px; align-items: center; margin: 7px 0; }
   .row label { color: #9fb6d6; font-size: 11px; letter-spacing: 1px; }
   .row output { text-align: right; color: #ffd27f; font-variant-numeric: tabular-nums; font-size: 11px; }
@@ -30,19 +31,19 @@
 <div class="sub">마우스로 조절. 게임 창(dual.html) 두 개에 실시간 반영되고 값은 저장됨 (새로고침해도 유지)</div>
 
 <div class="grid">
-  <div class="box" data-side="skate"><h2>🛹 SKATE 톤</h2>
+  <div class="box" data-side="skate"><h2>🛹 SKATE 톤 <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="row"><label>HUE</label><input type="range" data-k="skate.hue" min="-180" max="180" value="0"><output>0</output></div>
     <div class="row"><label>SATURATE</label><input type="range" data-k="skate.sat" min="0" max="3" step="0.05" value="1"><output>1</output></div>
     <div class="row"><label>CONTRAST</label><input type="range" data-k="skate.con" min="0.4" max="2.2" step="0.05" value="1"><output>1</output></div>
     <div class="row"><label>BRIGHT</label><input type="range" data-k="skate.bri" min="0.3" max="2" step="0.05" value="1"><output>1</output></div>
   </div>
-  <div class="box"><h2>🛸 FLIGHT 톤</h2>
+  <div class="box"><h2>🛸 FLIGHT 톤 <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="row"><label>HUE</label><input type="range" data-k="flight.hue" min="-180" max="180" value="0"><output>0</output></div>
     <div class="row"><label>SATURATE</label><input type="range" data-k="flight.sat" min="0" max="3" step="0.05" value="1"><output>1</output></div>
     <div class="row"><label>CONTRAST</label><input type="range" data-k="flight.con" min="0.4" max="2.2" step="0.05" value="1"><output>1</output></div>
     <div class="row"><label>BRIGHT</label><input type="range" data-k="flight.bri" min="0.3" max="2" step="0.05" value="1"><output>1</output></div>
   </div>
-  <div class="box"><h2>🎛 RGB 채널 믹스 (양쪽 공통)</h2>
+  <div class="box"><h2>🎛 RGB 채널 믹스 (양쪽 공통) <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="row"><label>RED</label><input type="range" data-k="mixR" min="0" max="2" step="0.05" value="1"><output>1</output></div>
     <div class="row"><label>GREEN</label><input type="range" data-k="mixG" min="0" max="2" step="0.05" value="1"><output>1</output></div>
     <div class="row"><label>BLUE</label><input type="range" data-k="mixB" min="0" max="2" step="0.05" value="1"><output>1</output></div>
@@ -51,7 +52,7 @@
       <button data-mix="0.2,0.3,1">전부 파랑</button><button data-mix="1,1,1">원색</button>
     </div>
   </div>
-  <div class="box"><h2>⚡ STROBE</h2>
+  <div class="box"><h2>⚡ STROBE <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="row"><label>로고 바탕</label><input type="color" data-k="logoBg" value="#ffffff"><output></output></div>
     <div class="row"><label>로고 크기</label><input type="range" data-k="logoSize" min="30" max="120" value="72"><output>72</output></div>
     <div class="row"><label>속도 Hz</label><input type="range" data-k="hz" min="0" max="24" step="0.5" value="0"><output>스틱</output></div>
@@ -61,14 +62,14 @@
     <div class="row"><label>얼굴 최대</label><input type="range" data-k="faceMax" min="50" max="300" value="175"><output>175</output></div>
     <div class="row"><label>얼굴 반복</label><input type="range" data-k="faceRepeat" min="1" max="30" value="10"><output>10</output></div>
   </div>
-  <div class="box"><h2>🎤 마이크 킥 → 인버트</h2>
+  <div class="box"><h2>🎤 마이크 킥 → 인버트 <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="btns"><button id="mic">🎤 마이크 켜기</button></div>
     <div class="row"><label>감도</label><input type="range" id="micSens" min="1.2" max="4" step="0.1" value="2.2"><output>2.2</output></div>
     <div class="row"><label>최소 간격 ms</label><input type="range" id="micGap" min="80" max="600" step="10" value="220"><output>220</output></div>
     <div class="row"><label>저음 레벨</label><div style="height:12px;background:#0c1020;border:1px solid #24304f;border-radius:3px;position:relative"><div id="micBar" style="position:absolute;left:0;top:0;bottom:0;width:0;background:#7df0ff"></div><div id="micThr" style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#ff3c5a;left:0"></div></div><output id="micHits">0</output></div>
     <div class="sub" style="margin:6px 0 0">베이스 킥(40~150Hz)이 평균보다 "감도"배 크면 한 번 펄스. 빨간 선 = 현재 문턱</div>
   </div>
-  <div class="box"><h2>🔁 INVERT (R1)</h2>
+  <div class="box"><h2>🔁 INVERT (R1) <button class="rst" title="이 박스만 기본값으로">리셋</button></h2>
     <div class="row"><label>디케이 s</label><input type="range" data-k="decay" min="0.1" max="2" step="0.05" value="0.7"><output>0.7</output></div>
     <div class="row"><label>세기</label><input type="range" data-k="invMax" min="0.2" max="1" step="0.05" value="1"><output>1</output></div>
   </div>
@@ -109,6 +110,10 @@
   });
   document.querySelectorAll('[data-mix]').forEach(bt => bt.addEventListener('click', () => {
     const [r, g, b] = bt.dataset.mix.split(',').map(Number); ctl.mixR = r; ctl.mixG = g; ctl.mixB = b; paint(); send();
+  }));
+  document.querySelectorAll('.box .rst').forEach(bt => bt.addEventListener('click', () => {
+    for (const el of bt.closest('.box').querySelectorAll('[data-k]')) ctl[el.dataset.k] = defaults[el.dataset.k];
+    paint(); send();
   }));
   document.getElementById('reset').addEventListener('click', () => { Object.assign(ctl, defaults); ctl.black = false; paint(); send(); });
   document.getElementById('black').addEventListener('click', () => { ctl.black = !ctl.black; paint(); send(); });
