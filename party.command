@@ -19,9 +19,16 @@ SW
 swift "$TMP/disp.swift" 2>/dev/null | sort -n > "$TMP/ext.txt"
 N=$(wc -l < "$TMP/ext.txt" | tr -d ' ')
 
-osascript -e 'tell application "Google Chrome" to close (every tab of every window whose URL contains "dual.html")' 2>/dev/null
-open -a "Google Chrome" "http://localhost:8899/control.html"   # 컨트롤 패널 (노트북 화면, 마우스로 톤/스트로브 조절)
-sleep 0.5
+osascript -e 'tell application "Google Chrome" to close (every tab of every window whose URL contains "localhost:8899")' 2>/dev/null
+osascript <<AS
+tell application "Google Chrome"
+  activate
+  set cw to make new window
+  set URL of active tab of cw to "http://localhost:8899/control.html"
+  set bounds of cw to {0, 40, 1800, 1169}
+end tell
+AS
+sleep 1
 if [ "$N" -ge 2 ]; then
   read lx ly lw lh < <(sed -n 1p "$TMP/ext.txt"); read rx ry rw rh < <(sed -n 2p "$TMP/ext.txt")
   osascript <<AS
