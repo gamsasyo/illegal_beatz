@@ -341,6 +341,9 @@
   const FX_TAP  = {};
   const fxOn = { strobe:false, invert:false, black:false, hue:false };
   let strobeHz = 12, flashUntil = 0, tapPrev = {};
+  const FX_LOGO = "#fff url('bitmap/Brick.png') center / 72% auto no-repeat";   // 로고 크기 = 프레임 폭의 72%
+  let fxBgNow = '';
+  new Image().src = 'bitmap/Brick.png';           // 미리 로드 — 첫 스트로브에 빈 흰 화면 안 뜨게
   const $fx = document.getElementById('fx'), $wrap = document.querySelector('.wrap');
 
   function fxRead(b, ax) {
@@ -360,11 +363,13 @@
 
   function fxDraw() {
     const t = performance.now();
-    let bg = '#fff', op = 0;
+    // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
+    let bg = FX_LOGO, op = 0;
     if (fxOn.black) { bg = '#000'; op = 1; }
     else if (fxOn.strobe) op = (Math.floor(t / 1000 * strobeHz * 2) % 2) ? 1 : 0;
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
-    $fx.style.background = bg; $fx.style.opacity = op;
+    if (bg !== fxBgNow) { fxBgNow = bg; $fx.style.background = bg; }   // 매 프레임 background 재설정 방지
+    $fx.style.opacity = op;
 
     const f = [];
     if (fxOn.invert) f.push('invert(1)');
