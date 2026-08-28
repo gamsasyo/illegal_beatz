@@ -81,7 +81,7 @@
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
-  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>스트로브 <b>R1</b>반전 <b>L2</b>블랙</div>
+  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>스트로브 <b>R1</b>반전 <b>L2</b>블랙 &nbsp;·&nbsp; <b>L2+R2</b> 오토파일럿</div>
   <div class="st" id="st">MANUAL</div>
   <div class="fx" id="fxst"></div>
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
@@ -224,7 +224,6 @@
   // 위의 forward() 가 그대로 받아서 두 iframe 에 전달 → 게임 코드는 손 안 댐.
   const PAD_BTN = {
     0:  'Space',   // ✕  점프 / 부스트
-    9:  'KeyE',    // OPTIONS 오토파일럿
     // 트릭 — skate 공중 트릭 + flight 파일럿 쇼가 같은 순간에 터짐. 방향 입력과 분리 (스틱은 이동만)
     3:  'KeyI',    // △  INDY / 백플립
     2:  'KeyJ',    // □  360 SPIN / 배럴롤
@@ -234,7 +233,7 @@
   };
   const DEAD = 0.35;          // 스틱 데드존 (블루투스 PS패드는 드리프트가 좀 있음)
   const padPrev = {};         // 신호명 → 현재 눌림 상태
-  let padId = '', padDbg = false, padRunning = false;
+  let padId = '', padDbg = false, padRunning = false, chordPrev = false, optPrev = false;
   let fpsN = 0, fpsT0 = performance.now(), fpsVal = 0;
 
   function padSend(sig, down) {
@@ -274,8 +273,11 @@
     }
 
     const b = gp.buttons, ax = gp.axes;
-    const want = { KeyW:false, KeyA:false, KeyS:false, KeyD:false, Space:false, KeyE:false, KeyI:false, KeyJ:false, KeyK:false, KeyL:false };
-    for (const i in PAD_BTN) if (b[i] && b[i].pressed) want[PAD_BTN[i]] = true;
+    const want = { KeyW:false, KeyA:false, KeyS:false, KeyD:false, Space:false, KeyI:false, KeyJ:false, KeyK:false, KeyL:false };
+    for (const i in PAD_BTN) if (b[i] && b[i].pressed && PAD_BTN[i] in want) want[PAD_BTN[i]] = true;
+    const opt = !!(b[9] && b[9].pressed);            // OPTIONS = 오토파일럿 (눌리는 순간 한 번)
+    if (opt && !optPrev) { padSend('KeyE', true); setTimeout(() => padSend('KeyE', false), 40); }
+    optPrev = opt;
 
     const lx = ax[0] || 0, ly = ax[1] || 0;          // 왼쪽 스틱
     if (ly < -DEAD) want.KeyW = true;
@@ -283,6 +285,10 @@
     if (lx < -DEAD) want.KeyA = true;
     if (lx >  DEAD) want.KeyD = true;
 
+    // L2 + R2 동시 = 오토파일럿 토글 (OPTIONS 와 같은 기능). 두 개가 같이 눌리는 순간에만 한 번
+    const chord = !!(b[6] && b[6].pressed && b[7] && b[7].pressed);
+    if (chord && !chordPrev) { padSend('KeyE', true); setTimeout(() => padSend('KeyE', false), 40); }
+    chordPrev = chord;
     for (const s in want) padSend(s, want[s]);
     fxRead(b, ax);
 
