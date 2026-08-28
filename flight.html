@@ -185,29 +185,34 @@ function addOutlined(parent, geo, color, ox=1.12) {
   o.scale.setScalar(ox); m.add(o);
   return m;
 }
-const BODY_C=0xe23c3c, WING_C=0xf0e2b0, TAIL_C=0xf0e2b0, ACC_C=0x2aa0c0;
-// 동체
-const fuselage = addOutlined(ship, new THREE.BoxGeometry(1.15, 1.0, 3.0), BODY_C, 1.06); fuselage.position.z = 0.1;
-const nose = addOutlined(ship, new THREE.CylinderGeometry(0.5, 0.58, 0.7, 12), BODY_C, 1.1); nose.rotation.x = Math.PI/2; nose.position.set(0,0,-1.55);
-// 낮은 날개 (캐릭터 안 가리게 동체 아래로)
-const wing = addOutlined(ship, new THREE.BoxGeometry(5.4, 0.16, 1.1), WING_C, 1.05); wing.position.set(0, -0.12, -0.1);
-// 콕핏 안장 (캐릭터가 앉는 자리)
-const seatWell = addOutlined(ship, new THREE.CylinderGeometry(0.52, 0.44, 0.55, 16), 0x3a1414, 1.03); seatWell.position.set(0, 0.5, 0.1);
-const seatRim  = new THREE.Mesh(new THREE.TorusGeometry(0.54, 0.1, 10, 22), new THREE.MeshStandardMaterial({ color:BODY_C, flatShading:true, roughness:0.6 }));
-seatRim.rotation.x = Math.PI/2; seatRim.position.set(0, 0.78, 0.1); ship.add(seatRim);
-const seatRimO = new THREE.Mesh(new THREE.TorusGeometry(0.54,0.1,10,22), new THREE.MeshBasicMaterial({ color:0x000000, side:THREE.BackSide })); seatRimO.scale.setScalar(1.1); seatRim.add(seatRimO);
-// 꼬리
-const fin  = addOutlined(ship, new THREE.BoxGeometry(0.16, 0.85, 0.7), BODY_C, 1.08); fin.position.set(0, 0.60, 1.32);   // 앞·위로 살짝
-const stab = addOutlined(ship, new THREE.BoxGeometry(2.0, 0.14, 0.6), TAIL_C, 1.06); stab.position.set(0, 0.28, 1.62);  // 뒤로 살짝 → 면 안 겹침
-// 바퀴
-for (const sx of [-0.62, 0.62]){ const w = addOutlined(ship, new THREE.CylinderGeometry(0.26,0.26,0.16,12), 0x222228, 1.12); w.rotation.z = Math.PI/2; w.position.set(sx,-0.72,-0.5); }
-// 윈드스크린 (안장 앞)
-const glass = new THREE.Mesh(new THREE.BoxGeometry(0.85,0.45,0.4), new THREE.MeshStandardMaterial({ color:0xbfe8ff, transparent:true, opacity:0.5, roughness:0.1, metalness:0.3 }));
-glass.position.set(0,0.6,-0.55); glass.rotation.x = -0.35; ship.add(glass);
-// 프로펠러 (앞코, 회전)
-const prop = new THREE.Group(); prop.position.set(0,0,-1.95); ship.add(prop);
-const hub = new THREE.Mesh(new THREE.SphereGeometry(0.16,8,8), new THREE.MeshStandardMaterial({color:0x222228})); prop.add(hub);
-for (let b=0;b<2;b++){ const bl=new THREE.Mesh(new THREE.BoxGeometry(0.12,2.0,0.05), new THREE.MeshStandardMaterial({color:0x33333a})); bl.rotation.z=b*Math.PI/2; prop.add(bl); }
+// ── 은색 UFO ── (비행기 대체. ship 그룹/prop 이름은 그대로 — 아래 코드가 참조)
+const SILVER = new THREE.MeshStandardMaterial({ color:0xd9dde6, metalness:0.85, roughness:0.28, flatShading:true });
+const SILVER_D = new THREE.MeshStandardMaterial({ color:0x8e95a3, metalness:0.9, roughness:0.35, flatShading:true });
+function addSilver(geo, mat, ox=1.05){                    // 검정 외곽선 (레트로 룩 유지)
+  const m = new THREE.Mesh(geo, mat); ship.add(m);
+  const o = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color:0x000000, side:THREE.BackSide })); o.scale.setScalar(ox); m.add(o);
+  return m;
+}
+// 접시: 위아래 원뿔 두 개 (납작) — 위는 완만, 아래는 조금 깊게
+const saucerTop = addSilver(new THREE.ConeGeometry(2.6, 0.55, 20), SILVER, 1.04);  saucerTop.position.y = 0.12;
+const saucerBot = addSilver(new THREE.ConeGeometry(2.6, 0.9, 20), SILVER_D, 1.04);  saucerBot.rotation.x = Math.PI; saucerBot.position.y = -0.6;
+// 테두리 링 (두툼)
+const rim = addSilver(new THREE.TorusGeometry(2.6, 0.22, 10, 28), SILVER, 1.08); rim.rotation.x = Math.PI/2; rim.position.y = -0.15;
+// 캐릭터 앉는 자리 (접시 위 얕은 콕핏)
+const seatWell = addSilver(new THREE.CylinderGeometry(0.55, 0.45, 0.4, 16), 0x2a2e3a ? new THREE.MeshStandardMaterial({ color:0x2a2e3a, roughness:0.7, flatShading:true }) : SILVER, 1.03);
+seatWell.position.set(0, 0.5, 0.1);
+// 유리 돔 (캐릭터 뒤쪽 반구, 캐릭터 안 가리게 뒤로)
+const dome = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10, 0, Math.PI*2, 0, Math.PI/2),
+  new THREE.MeshStandardMaterial({ color:0xbfe8ff, transparent:true, opacity:0.35, roughness:0.05, metalness:0.4 }));
+dome.position.set(0, 0.38, 0.85); ship.add(dome);
+// 밑면 회전 라이트 링 (prop = 회전하는 그룹. 부스트/오토 땐 빨라짐)
+const prop = new THREE.Group(); prop.position.set(0, -0.62, 0); ship.add(prop);
+const lightMat = new THREE.MeshStandardMaterial({ color:0xffe24a, emissive:0xffaa10, emissiveIntensity:1.4, roughness:0.4 });
+for (let k = 0; k < 8; k++){
+  const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), k % 2 ? lightMat : new THREE.MeshStandardMaterial({ color:0x7df0ff, emissive:0x20c0ff, emissiveIntensity:1.4 }));
+  const a = k / 8 * Math.PI * 2; l.position.set(Math.cos(a) * 1.7, 0, Math.sin(a) * 1.7); prop.add(l);
+}
+const hub = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), new THREE.MeshStandardMaterial({ color:0xff5aa0, emissive:0xff2070, emissiveIntensity:1.2 })); hub.position.y = -0.95; ship.add(hub);
 
 // 지구 캐릭터 파일럿(3D)은 buildGlobeHead/edgeTex 정의 이후에 생성됨 (아래 GLOBEHEAD 섹션 뒤)
 let pilotHead = null, pilotRig = null, jumpT = 1;   // jumpT<1 이면 점프 진행중
@@ -811,20 +816,22 @@ function update(dt) {
   }
   // 붙을 땐 빠르게(0.17) / 풀릴 땐 천천히(0.05) — 누른 순간 바로 반응해야 눌린 걸 알 수 있음
   // 기수 내림(W) = 살짝 더 빠름 — skate 에서 W(가속)를 꾹 누르고 있어도 뭔가 하는 느낌
-  const _tgt = ((autopilot||boosting) ? boostSpeed : baseSpeed) + (tp < 0 ? 0.12 : 0);
-  speed += (_tgt - speed) * (_tgt > speed ? 0.17 : 0.05);
+  // UFO: W 를 눌러야 앞으로 감. 안 누르면 그 자리에서 호버 (skate 처럼 '앞'이 입력). S = 빨리 멈춤
+  const thrust = !autopilot && keys['KeyW'];
+  const _tgt = (autopilot||boosting) ? boostSpeed : (thrust ? baseSpeed : 0);
+  speed += (_tgt - speed) * (_tgt > speed ? 0.17 : (keys['KeyS'] ? 0.15 : 0.04));   // 붙을 땐 빠르게, 놓으면 미끄러지듯, S 는 브레이크
 
   // ===== 레일 + 오프셋 =====
   railS += speed*dt*60;
   // 플레이어 오프셋 — A = 왼쪽(-pathRight), W = 아래(-pathUp). 뗐을 때 복귀 없음
   if (tBank) offLat = THREE.MathUtils.clamp(offLat - tBank*LAT_RATE*dt, -OFF_LAT, OFF_LAT);
-  if (tp)    offVer = THREE.MathUtils.clamp(offVer + tp*VER_RATE*dt,   -OFF_VER, OFF_VER);
+  // 상하는 손으로 안 움직임 (W/S 가 추진/브레이크로 감) — LP 자석이 높이를 맞춘다
   // 자석 코파일럿 — 앞쪽 가장 가까운 LP 구멍으로. skate 에 집중하는 동안에도 LP 를 통과한다
   let mg = null, mgd = 1e9;
   for (const r of rings){ const d = r.s - railS; if (d > 0 && d < mgd){ mgd = d; mg = r; } }
   if (mg && mgd < MAG_DIST){
     const kL = autopilot ? 6 : (tBank ? MAG_HELD : MAG_IDLE);
-    const kV = autopilot ? 6 : (tp    ? MAG_HELD : MAG_IDLE);
+    const kV = autopilot ? 6 : MAG_IDLE;
     offLat += (mg.jLat - offLat) * Math.min(1, kL*dt);
     offVer += (mg.jVer - offVer) * Math.min(1, kV*dt);
   }
@@ -836,7 +843,7 @@ function update(dt) {
   // 시각 틸트는 매 프레임 레일 자세 위에 다시 얹는다 (누적 X)
   const u  = undul(railS), u2 = undul(railS - 10);
   bank    += ((autopilot ? (u2.lat - u.lat)*0.06 : tBank*0.5) - bank) * 0.06;
-  pitchVis += (tp * 0.32 - pitchVis) * 0.1;
+  pitchVis += ((-0.22 * speed / boostSpeed) - pitchVis) * 0.08;   // 움직일수록 앞으로 기울어짐 (UFO 답게)
   yawVis   += (tBank * 0.22 - yawVis) * 0.1;
   plane.quaternion.copy(railQ);
   plane.rotateY(yawVis); plane.rotateX(pitchVis);
@@ -844,7 +851,7 @@ function update(dt) {
 
   const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(plane.quaternion);
   _right.set(1,0,0).applyQuaternion(plane.quaternion); _up.set(0,1,0).applyQuaternion(plane.quaternion);
-  prop.rotation.z += ((boosting||autopilot) ? 1.8 : 1.0);   // 프로펠러 회전 (부스트/오토시 빠르게)
+  prop.rotation.y += ((boosting||autopilot) ? 0.22 : 0.07) + speed * 0.12;   // 밑면 라이트 링 회전 (움직일수록 빨리)
 
   // beat flash from low bins
   const time = performance.now()*0.001;
