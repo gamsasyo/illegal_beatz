@@ -1213,6 +1213,7 @@ function tryCine() {
   const style = (combo.mult - CINE_MULT_AIR) + Math.max(0, h - CINE_MIN_HEIGHT) * 0.5;
   cine.dur = THREE.MathUtils.clamp(1.0 + style * 0.13, 1.0, 2.6);
   cine.active = true; cine.t = 0; cine.lastStamp = -1; P.cineDone = true;
+  for (const g of GHOSTS) { g.visible = false; g.userData.life = 0; }   // 남아있던 잔상도 정리
   cine.board = true;                                   // 항상 보드 리빌 (그립 ILLEGAL BEATZ 를 카메라로) — 파티에서 로고 노출
   cine.boardTight = Math.random() < 0.6;               // 60% 는 로고 화면 가득 클로즈업
   $('#cine').classList.add('on');
@@ -1227,7 +1228,7 @@ function cineCam(dt) {                                  // 실제(슬로우모�
     skater.userData.hipRoot.position.y = skater.userData.hipY;          // 점프 복귀
     skater.userData.hipRoot.position.z = skater.userData.hipZ || 0;
     camera.fov = 74; camera.updateProjectionMatrix(); return false; }   // FOV 원복
-  if (t - cine.lastStamp >= 0.05) { cine.lastStamp = t; stampGhost(); }  // 잔상 한 장씩 찍기
+  // 잔상 없음 — 슬로우모션 중 고스트가 보드(ILLEGAL BEATZ)를 가려서 뺐음
   const b = Math.sin(Math.PI * t);                     // 0→1→0 : 체이스 → 궤도 → 체이스 (부드럽게)
 
   // ── 보드 리빌: 캐릭터가 보드에서 점프하고, 보드가 카메라로 돌아 그립(illegal beatz) 클로즈업 ──
