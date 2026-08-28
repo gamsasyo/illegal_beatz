@@ -347,9 +347,15 @@
   const FX_TAP  = {};
   const fxOn = { strobe:false, invert:false, faces:false, hue:false };
   let strobeHz = 12, flashUntil = 0, tapPrev = {};
-  const FX_LOGO = "#fff url('bitmap/Brick.png') center / 72% auto no-repeat";   // 로고 크기 = 프레임 폭의 72%
-  let fxBgNow = '';
-  new Image().src = 'bitmap/Brick.png';           // 미리 로드 — 첫 스트로브에 빈 흰 화면 안 뜨게
+  // L1 로고 스트로브 — 누를 때마다 셋 중 랜덤 (직전 것과는 다르게). 흰 바탕.
+  const FX_LOGOS = [
+    "#fff url('bitmap/Brick.png') center / 72% auto no-repeat",          // BEAUTIFUL DISCO (가로형: 폭 72%)
+    "#fff url('bitmap/planet_turbo.png') center / auto 74% no-repeat",   // PLANET TURBO (정사각: 높이 74%)
+    "#fff url('bitmap/jungleF.png') center / auto 74% no-repeat",        // jungleF
+  ];
+  ['Brick', 'planet_turbo', 'jungleF'].forEach(n => { new Image().src = 'bitmap/' + n + '.png'; });   // 미리 로드
+  let logoIdx = 0, fxBgNow = '', strobePrev = false;
+  const FACE_REPEAT = 10;                          // L2: 얼굴 하나당 번쩍이는 횟수
   // L2 = 크루 얼굴 셋이 번갈아 (SAWTEETH → SHINS → BEAUTIFUL DISCO). 흰 바탕, 프레임 높이의 62%
   const FX_FACES = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
     const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u;
@@ -359,6 +365,7 @@
 
   function fxRead(b, ax) {
     for (const i in FX_HOLD) fxOn[FX_HOLD[i]] = !!(b[i] && b[i].pressed);
+    pickLogo(fxOn.strobe);
     for (const i in FX_TAP) {                       // 탭은 눌린 순간에만
       const now = !!(b[i] && b[i].pressed);
       if (now && !tapPrev[i]) flashUntil = performance.now() + 220;
@@ -372,12 +379,17 @@
   }
   let fxLastSig = '';
 
+  // L1 이 눌리는 순간마다 로고를 새로 뽑는다 (직전과 다른 것)
+  function pickLogo(on) {
+    if (on && !strobePrev) { let n; do { n = (Math.random() * FX_LOGOS.length) | 0; } while (n === logoIdx); logoIdx = n; }
+    strobePrev = on;
+  }
   function fxDraw() {
     const t = performance.now();
     // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
-    let bg = FX_LOGO, op = 0;
+    let bg = FX_LOGOS[logoIdx], op = 0;
     const ph = Math.floor(t / 1000 * strobeHz * 2);          // 반주기 카운터 (홀수 = 켜짐)
-    if (fxOn.faces) { bg = FX_FACES[Math.floor(ph / 2) % 3]; op = (ph % 2) ? 1 : 0; }   // 켜질 때마다 다음 얼굴
+    if (fxOn.faces) { bg = FX_FACES[Math.floor(ph / 2 / FACE_REPEAT) % 3]; op = (ph % 2) ? 1 : 0; }   // 얼굴 하나당 FACE_REPEAT 번
     else if (fxOn.strobe) op = (ph % 2) ? 1 : 0;
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
     if (bg !== fxBgNow) { fxBgNow = bg; $fx.style.background = bg; }   // 매 프레임 background 재설정 방지
@@ -400,9 +412,9 @@
   const FX_KEY = { Digit1:'strobe', Digit2:'invert', Digit3:'faces', Digit4:'hue' };
   addEventListener('keydown', e => {
     if (e.code === 'Digit5') flashUntil = performance.now() + 220;
-    if (FX_KEY[e.code]) fxOn[FX_KEY[e.code]] = true;
+    if (FX_KEY[e.code]) { fxOn[FX_KEY[e.code]] = true; if (e.code === 'Digit1') pickLogo(true); }
   });
-  addEventListener('keyup', e => { if (FX_KEY[e.code]) fxOn[FX_KEY[e.code]] = false; });
+  addEventListener('keyup', e => { if (FX_KEY[e.code]) { fxOn[FX_KEY[e.code]] = false; if (e.code === 'Digit1') pickLogo(false); } });
 
   addEventListener('gamepadconnected', () => { if (!padRunning) padPoll(); });
   addEventListener('keydown', e => {
