@@ -81,7 +81,7 @@
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
-  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>컬러킥 <b>L2</b>얼굴 &nbsp;·&nbsp; <b>R1+R2</b> 오토파일럿</div>
+  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>반전(킥) <b>L2</b>얼굴 &nbsp;·&nbsp; <b>R1+R2</b> 오토파일럿</div>
   <div class="st" id="st">MANUAL</div>
   <div class="fx" id="fxst"></div>
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
@@ -357,7 +357,7 @@
     "#fff url('bitmap/Brick.png') center / 72% auto no-repeat",   // 반전: filter 로 뒤집음 (같은 자리)
   ];
   new Image().src = 'bitmap/Brick.png';
-  let logoIdx = 0, fxBgNow = '', strobePrev = false, fxInvNow = -1;
+  let logoIdx = 0, fxBgNow = '', strobePrev = false, fxFiltNow = '';
   const FACE_REPEAT = 10;                          // L2: 얼굴 하나당 번쩍이는 횟수
   // R1 반전 = 킥 엔벨로프. 누르면 즉시 100%, 떼면 INV_DECAY 초에 걸쳐 빠져나감 (지수 감쇠)
   const INV_DECAY = 0.7;
@@ -418,17 +418,18 @@
   function fxDraw() {
     const t = performance.now();
     // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
-    let bg = FX_LOGOS[0], op = 0, fxInv = 0;
+    let bg = FX_LOGOS[0], op = 0, fxFilt = '';
     const ph = Math.floor(t / 1000 * strobeHz * 2);          // 반주기 카운터 (홀수 = 켜짐)
     if (fxOn.faces) {                                            // 얼굴 하나당 FACE_REPEAT 번, 점점 커짐
       const n = Math.floor(ph / 2);
       bg = faceBg(Math.floor(n / FACE_REPEAT) % 3, n % FACE_REPEAT); op = (ph % 2) ? 1 : 0;
-      fxInv = 1;                                                 // 얼굴 픽셀만 반전 (투명 배경은 그대로)
+      // 얼굴 선을 네온 컬러로: 흰 선(invert) → 세피아 → 채도 → 색조 회전. 번쩍일 때마다 색이 돎 (10번 = 한 바퀴)
+      fxFilt = 'invert(1) sepia(1) saturate(9) hue-rotate(' + ((n * 36 + 300) % 360) + 'deg) brightness(1.25)';
     }
-    else if (fxOn.strobe) { op = (ph % 2) ? 1 : 0; const k = Math.floor(ph / 2) % 2; bg = FX_LOGOS[k]; fxInv = k; }   // 짝수번째 정상/왼쪽, 홀수번째 반전/오른쪽
+    else if (fxOn.strobe) { op = (ph % 2) ? 1 : 0; const k = Math.floor(ph / 2) % 2; bg = FX_LOGOS[k]; fxFilt = k ? 'invert(1)' : ''; }   // 정상 ↔ 반전 교차
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
     if (bg !== fxBgNow) { fxBgNow = bg; $fx.style.background = bg; }   // 매 프레임 background 재설정 방지
-    if (fxInv !== fxInvNow) { fxInvNow = fxInv; $fx.style.filter = fxInv ? 'invert(1)' : ''; }
+    if (fxFilt !== fxFiltNow) { fxFiltNow = fxFilt; $fx.style.filter = fxFilt; }
     $fx.style.opacity = op;
 
     const dtF = Math.min(0.1, (t - fxLastT) / 1000); fxLastT = t;
@@ -436,14 +437,14 @@
     if (fxOn.invert) invAmt = 1; else invAmt *= Math.exp(-dtF / (INV_DECAY / 3));   // 3τ ≈ INV_DECAY 에서 5%
     if (invAmt < 0.02) invAmt = 0;
     const f = [];
-    if (invAmt > 0) f.push('hue-rotate(' + (kickHue * invAmt).toFixed(1) + 'deg) saturate(' + (1 + 2.2 * invAmt).toFixed(2) + ')');   // 컬러 킥
+    if (invAmt > 0) f.push('invert(' + invAmt.toFixed(3) + ')');
     if (fxOn.hue) f.push('hue-rotate(' + Math.floor(t / 6 % 360) + 'deg) saturate(2.5)');
     $wrap.style.filter = f.join(' ');
 
     const act = Object.keys(fxOn).filter(k => fxOn[k]);
     document.getElementById('fxst').textContent =
       (act.length ? '▓ ' + act.join(' + ').toUpperCase() + (fxOn.strobe ? ' ' + strobeHz.toFixed(0) + 'Hz' : '') : '') +
-      (invAuto ? '  ● AUTO KICK ' + Math.round(60 / invAuto) + ' BPM' : (taps.length ? '  tap ' + taps.length + '/' + AUTO_TAPS : ''));
+      (invAuto ? '  ● AUTO INVERT ' + Math.round(60 / invAuto) + ' BPM' : (taps.length ? '  tap ' + taps.length + '/' + AUTO_TAPS : ''));
     requestAnimationFrame(fxDraw);
   }
   fxDraw();
