@@ -11,6 +11,7 @@
   .sub { color: #6b7f9e; font-size: 11px; margin-bottom: 18px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
   .box { border: 1px solid #1f2c4a; border-radius: 10px; padding: 14px 16px; background: #0f1322; }
+  #play { cursor: crosshair; }
   .box h2 { font-size: 11px; letter-spacing: 3px; color: #7df0ff; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; }
   .box h2 .rst { padding: 3px 8px; font-size: 10px; letter-spacing: 1px; }
   .row { display: grid; grid-template-columns: 96px 1fr 52px; gap: 10px; align-items: center; margin: 7px 0; }
@@ -78,6 +79,8 @@
   <button id="reset">전부 리셋</button>
   <button id="black" class="">블랙아웃 (양쪽)</button>
 </div>
+<!-- 하단 놀이터: PLANET TURBO 가 DVD 로고처럼 튕겨 다니고 크루 얼굴이 따라다님 -->
+<canvas id="play" style="display:block;width:100%;height:190px;margin-top:18px;border:1px solid #1f2c4a;border-radius:10px;background:#0f1322"></canvas>
 <div id="st">—</div>
 
 <script>
@@ -149,6 +152,43 @@
     document.getElementById('micHits').textContent = hits;
     requestAnimationFrame(micLoop);
   }   // 게임 창이 나중에 열려도 3초 안에 받음
+
+  // ── 하단 애니메이션 ──
+  (() => {
+    const cv = document.getElementById('play'), g = cv.getContext('2d');
+    const load = n => { const im = new Image(); im.src = 'bitmap/' + encodeURIComponent(n) + '.png'; return im; };
+    const turbo = load('planet_turbo'), faces = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(load);
+    const S = [{ im: turbo, x: 60, y: 40, vx: 1.6, vy: 1.1, r: 0, vr: 0.012, s: 110 }];
+    faces.forEach((im, i) => S.push({ im, x: 200 + i * 140, y: 60 + i * 20, vx: 1.2 + i * 0.3, vy: -0.9 + i * 0.4, r: 0, vr: (i % 2 ? -1 : 1) * 0.02, s: 64 }));
+    let W = 0, H = 0, hue = 0;
+    function fit() { const d = devicePixelRatio || 1; W = cv.clientWidth; H = cv.clientHeight; cv.width = W * d; cv.height = H * d; g.setTransform(d, 0, 0, d, 0, 0); }
+    addEventListener('resize', fit); fit();
+    cv.addEventListener('pointerdown', e => {                       // 클릭하면 그쪽으로 다 튀어감
+      const b = cv.getBoundingClientRect();
+      for (const o of S) { const dx = e.clientX - b.left - o.x, dy = e.clientY - b.top - o.y, l = Math.hypot(dx, dy) || 1; o.vx = dx / l * 4; o.vy = dy / l * 4; }
+    });
+    function tick() {
+      g.clearRect(0, 0, W, H);
+      hue = (hue + 0.4) % 360;
+      g.strokeStyle = 'hsla(' + hue + ',80%,60%,.25)'; g.lineWidth = 1;
+      for (let i = 1; i < S.length; i++) { g.beginPath(); g.moveTo(S[0].x, S[0].y); g.lineTo(S[i].x, S[i].y); g.stroke(); }   // 터보 ↔ 얼굴 줄
+      for (const o of S) {
+        o.x += o.vx; o.y += o.vy; o.r += o.vr;
+        const h = o.s / 2;
+        if (o.x < h || o.x > W - h) { o.vx *= -1; o.x = Math.max(h, Math.min(W - h, o.x)); }
+        if (o.y < h || o.y > H - h) { o.vy *= -1; o.y = Math.max(h, Math.min(H - h, o.y)); }
+        o.vx *= 0.999; o.vy *= 0.999; if (Math.hypot(o.vx, o.vy) < 0.6) { o.vx += (Math.random() - .5) * .6; o.vy += (Math.random() - .5) * .6; }
+        if (o.im.complete && o.im.naturalWidth) {
+          const w = o.s, hh = o.s * o.im.naturalHeight / o.im.naturalWidth;
+          g.save(); g.translate(o.x, o.y); g.rotate(o.r);
+          if (o.im === turbo) { g.shadowColor = 'hsl(' + hue + ',90%,60%)'; g.shadowBlur = 18; }
+          g.drawImage(o.im, -w / 2, -hh / 2, w, hh); g.restore();
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+    tick();
+  })();
 </script>
 </body>
 </html>
