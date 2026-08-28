@@ -934,6 +934,7 @@ const skater = new THREE.Group();
   const hipRoot = new THREE.Group(); hipRoot.position.y = HIP_Y; hipRoot.rotation.y = STANCE; skater.add(hipRoot);
   skater.userData.hipRoot = hipRoot;
   skater.userData.hipY = HIP_Y;                         // 보드 리빌(점프) 후 복귀용 기준높이
+  skater.userData.hipZ = skater.userData.hipRoot.position.z;
   const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.42), bodyMat);
   pelvis.position.y = -0.11; hipRoot.add(pelvis);        // 골반(다리 연결부)
 
@@ -1224,6 +1225,7 @@ function cineCam(dt) {                                  // 실제(슬로우모�
   const t = cine.t;
   if (t >= 1) { cine.active = false; cine.cd = 3.5; $('#cine').classList.remove('on');
     skater.userData.hipRoot.position.y = skater.userData.hipY;          // 점프 복귀
+    skater.userData.hipRoot.position.z = skater.userData.hipZ || 0;
     camera.fov = 74; camera.updateProjectionMatrix(); return false; }   // FOV 원복
   if (t - cine.lastStamp >= 0.05) { cine.lastStamp = t; stampGhost(); }  // 잔상 한 장씩 찍기
   const b = Math.sin(Math.PI * t);                     // 0→1→0 : 체이스 → 궤도 → 체이스 (부드럽게)
@@ -1233,7 +1235,10 @@ function cineCam(dt) {                                  // 실제(슬로우모�
     const hipRoot = skater.userData.hipRoot, bp = skater.userData.boardPivot, tight = cine.boardTight;
     skater.rotation.set(P.flip * (1 - b), P.yaw + P.spin * (1 - b), P.roll * (1 - b));   // 스핀/플립 잠재워 보드 안정
     bp.rotation.set(-0.175 * b, P.board.shuv + 1.22 * b, 0);   // 긴축을 약 20° 대각선으로(완전 수평 아님), 살짝 기울여 그립이 위로
-    hipRoot.position.y = skater.userData.hipY + b * (tight ? 2.9 : 1.7);   // tight=캐릭터 더 높이(프레임 밖)
+    // 캐릭터를 보드보다 '앞'(카메라 반대쪽)으로 밀고 더 높이 — 카메라가 뒤·위에서 보드를 보므로
+    // 캐릭터가 카메라와 보드 사이에 끼어 ILLEGAL BEATZ 를 가리지 않는다
+    hipRoot.position.y = skater.userData.hipY + b * (tight ? 3.6 : 2.6);
+    hipRoot.position.z = (skater.userData.hipZ || 0) + b * 2.2;
     skater.updateMatrixWorld(true);
     bp.getWorldPosition(_head);                        // 보드 위치(_head 재사용)
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
