@@ -177,6 +177,7 @@
   if (relay) relay.onmessage = ({ data }) => {
     window.__relay.rx++;
     document.getElementById('boot').classList.add('hidden');            // 다른 창이 시작했으면 이 창도 시작
+    if (data.t === 'ctl') { applyCtl(data.ctl); return; }
     if (data.t === 'fx') {
       if (!padId) { tapInvert(!!data.on.invert); pickLogo(!!data.on.strobe); Object.assign(fxOn, data.on); strobeHz = data.hz; }   // 탭템포도 같이 계산
       return;
@@ -343,6 +344,26 @@
   });
   applyClean();                                 // 이미 로드된 iframe 도 즉시 적용
 
+
+  // ───────────────── 컨트롤 패널 (control.html) ─────────────────
+  // 마우스로 톤/스트로브 색을 조절하는 별도 창. BroadcastChannel 'ctl' 메시지 + localStorage 로 받는다.
+  const ctl = { hz: 0, faceHue: 300, faceStep: 36, invMax: 1, black: false };
+  try { Object.assign(ctl, JSON.parse(localStorage.getItem('illegal.ctl')) || {}); } catch (_) {}
+  function applyCtl(c) {
+    Object.assign(ctl, c);
+    const tone = side => `hue-rotate(${c[side + '.hue'] || 0}deg) saturate(${c[side + '.sat'] ?? 1}) contrast(${c[side + '.con'] ?? 1}) brightness(${c[side + '.bri'] ?? 1})`;
+    const fa = document.getElementById('a'), fb = document.getElementById('b');
+    if (fa) fa.parentElement.style.filter = tone('skate');
+    if (fb) fb.parentElement.style.filter = tone('flight');
+    const bgc = c.logoBg || '#ffffff', sz = c.logoSize || 72;
+    FX_LOGOS = [0, 1].map(() => bgc + " url('bitmap/Brick.png') center / " + sz + "% auto no-repeat");
+    fxBgNow = '';                                       // 다음 프레임에 배경 다시 적용
+    if (c.faceMin !== undefined) FACE_MIN = +c.faceMin;
+    if (c.faceMax !== undefined) FACE_MAX = +c.faceMax;
+    if (c.faceRepeat !== undefined) FACE_REPEAT = Math.max(1, +c.faceRepeat);
+    if (c.decay !== undefined) INV_DECAY = +c.decay;
+  }
+
   // ───────────────── FX (VJ 스트로브) ─────────────────
   // 게임 조작에 안 쓰는 버튼에만 물림. 오버레이 1장 + .wrap 필터로 처리 —
   // 게임 렌더 루프는 전혀 안 건드리므로 프레임 손해가 없음.
@@ -352,15 +373,15 @@
   let strobeHz = 12, flashUntil = 0, tapPrev = {};
   // L1 로고 스트로브 — 누를 때마다 셋 중 랜덤 (직전 것과는 다르게). 흰 바탕.
   // L1 = BEAUTIFUL DISCO 로고 스트로브. 번쩍일 때마다 정상(왼쪽으로) ↔ 반전(오른쪽으로) 교차
-  const FX_LOGOS = [
+  let FX_LOGOS = [
     "#fff url('bitmap/Brick.png') center / 72% auto no-repeat",   // 정상: 검정 로고
     "#fff url('bitmap/Brick.png') center / 72% auto no-repeat",   // 반전: filter 로 뒤집음 (같은 자리)
   ];
   new Image().src = 'bitmap/Brick.png';
   let logoIdx = 0, fxBgNow = '', strobePrev = false, fxFiltNow = '';
-  const FACE_REPEAT = 10;                          // L2: 얼굴 하나당 번쩍이는 횟수
+  let FACE_REPEAT = 10;                          // L2: 얼굴 하나당 번쩍이는 횟수
   // R1 반전 = 킥 엔벨로프. 누르면 즉시 100%, 떼면 INV_DECAY 초에 걸쳐 빠져나감 (지수 감쇠)
-  const INV_DECAY = 0.7;
+  let INV_DECAY = 0.7;
   let invAmt = 0, fxLastT = performance.now();
   // 컬러 킥: 칠 때마다 색조가 랜덤하게 크게 뒤집히고(90°~270°) 채도가 터졌다가 엔벨로프 따라 돌아옴
   let kickHue = 180;
@@ -372,9 +393,9 @@
   const FACE_URLS = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
     const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u; return u;
   });
-  const FACE_MIN = 22, FACE_MAX = 175;               // 프레임 높이 %. 100 넘으면 화면 밖으로 넘쳐 나감 (마지막 서너 번)
+  let FACE_MIN = 22, FACE_MAX = 175;               // 프레임 높이 %. 100 넘으면 화면 밖으로 넘쳐 나감 (마지막 서너 번)
   const faceBg = (i, k) => "transparent url('" + FACE_URLS[i] + "') center / auto " +
-    (FACE_MIN + (FACE_MAX - FACE_MIN) * k / (FACE_REPEAT - 1)).toFixed(1) + "% no-repeat";
+    (FACE_MIN + (FACE_MAX - FACE_MIN) * k / Math.max(1, FACE_REPEAT - 1)).toFixed(1) + "% no-repeat";
   const $fx = document.getElementById('fx'), $wrap = document.querySelector('.wrap');
 
   function fxRead(b, ax) {
@@ -399,7 +420,7 @@
   // R1 탭 기록. 어택은 여기서 즉시 (그리기 루프 안 기다림)
   function tapInvert(on) {
     if (on && !invPrev) {
-      invAmt = 1;
+      invAmt = ctl.invMax;
       kickHue = 90 + Math.random() * 180;                          // 직전과 다른 색감으로
       const now = performance.now() / 1000;
       if (invAuto) { invAuto = 0; taps = []; }                       // 자동 중 한 번 더 = 해제
@@ -419,12 +440,14 @@
     const t = performance.now();
     // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
     let bg = FX_LOGOS[0], op = 0, fxFilt = '';
-    const ph = Math.floor(t / 1000 * strobeHz * 2);          // 반주기 카운터 (홀수 = 켜짐)
-    if (fxOn.faces) {                                            // 얼굴 하나당 FACE_REPEAT 번, 점점 커짐
+    const hzNow = ctl.hz > 0 ? ctl.hz : strobeHz;             // 컨트롤 패널이 정하면 스틱 무시
+    const ph = Math.floor(t / 1000 * hzNow * 2);              // 반주기 카운터 (홀수 = 켜짐)
+    if (ctl.black) { bg = '#000'; op = 1; }                      // 컨트롤 패널 블랙아웃
+    else if (fxOn.faces) {                                       // 얼굴 하나당 FACE_REPEAT 번, 점점 커짐
       const n = Math.floor(ph / 2);
       bg = faceBg(Math.floor(n / FACE_REPEAT) % 3, n % FACE_REPEAT); op = (ph % 2) ? 1 : 0;
       // 얼굴 선을 네온 컬러로: 흰 선(invert) → 세피아 → 채도 → 색조 회전. 번쩍일 때마다 색이 돎 (10번 = 한 바퀴)
-      fxFilt = 'invert(1) sepia(1) saturate(9) hue-rotate(' + ((n * 36 + 300) % 360) + 'deg) brightness(1.25)';
+      fxFilt = 'invert(1) sepia(1) saturate(9) hue-rotate(' + ((n * ctl.faceStep + ctl.faceHue) % 360) + 'deg) brightness(1.25)';
     }
     else if (fxOn.strobe) { op = (ph % 2) ? 1 : 0; const k = Math.floor(ph / 2) % 2; bg = FX_LOGOS[k]; fxFilt = k ? 'invert(1)' : ''; }   // 정상 ↔ 반전 교차
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
@@ -433,8 +456,8 @@
     $fx.style.opacity = op;
 
     const dtF = Math.min(0.1, (t - fxLastT) / 1000); fxLastT = t;
-    if (invAuto && t / 1000 >= invNextBeat) { invAmt = 1; kickHue = 90 + Math.random() * 180; invNextBeat += invAuto; }   // 자동 펄스
-    if (fxOn.invert) invAmt = 1; else invAmt *= Math.exp(-dtF / (INV_DECAY / 3));   // 3τ ≈ INV_DECAY 에서 5%
+    if (invAuto && t / 1000 >= invNextBeat) { invAmt = ctl.invMax; kickHue = 90 + Math.random() * 180; invNextBeat += invAuto; }   // 자동 펄스
+    if (fxOn.invert) invAmt = ctl.invMax; else invAmt *= Math.exp(-dtF / (INV_DECAY / 3));   // 3τ ≈ INV_DECAY 에서 5%
     if (invAmt < 0.02) invAmt = 0;
     const f = [];
     if (invAmt > 0) f.push('invert(' + invAmt.toFixed(3) + ')');
@@ -447,6 +470,7 @@
       (invAuto ? '  ● AUTO INVERT ' + Math.round(60 / invAuto) + ' BPM' : (taps.length ? '  tap ' + taps.length + '/' + AUTO_TAPS : ''));
     requestAnimationFrame(fxDraw);
   }
+  applyCtl(ctl);                                // (FX 상수 선언 뒤에서 — let TDZ)
   fxDraw();
 
   // 패드 없이 테스트용 — 숫자키 (게임엔 전달 안 되는 키라 충돌 없음)

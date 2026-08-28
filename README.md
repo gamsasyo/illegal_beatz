@@ -83,3 +83,8 @@ window) · **H** hide HUD · **P** pad debug/FPS. Pad: stick = move, ✕ jump/bo
 △□○R2 tricks, L1 logo strobe, L2 face strobe, R1 invert (tap tempo ×10 = auto),
 R1+R2 or OPTIONS = autopilot. Windows share input over BroadcastChannel, so the
 pad only needs to be seen by one of them.
+
+**Control panel:** `http://localhost:8899/control.html` on the laptop — mouse sliders for
+per-game colour tone (hue/saturation/contrast/brightness), strobe colour/size/speed,
+face-strobe colour cycle and size range, invert decay, and a blackout button. Changes
+broadcast live to both game windows and persist in the browser.

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>ILLEGAL BEATZ — CONTROL</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 22px 26px; background: #0b0e17; color: #eaf2ff;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+  h1 { font-size: 15px; letter-spacing: 4px; margin: 0 0 4px; color: #ffe24a; }
+  .sub { color: #6b7f9e; font-size: 11px; margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .box { border: 1px solid #1f2c4a; border-radius: 10px; padding: 14px 16px; background: #0f1322; }
+  .box h2 { font-size: 11px; letter-spacing: 3px; color: #7df0ff; margin: 0 0 12px; }
+  .row { display: grid; grid-template-columns: 96px 1fr 52px; gap: 10px; align-items: center; margin: 7px 0; }
+  .row label { color: #9fb6d6; font-size: 11px; letter-spacing: 1px; }
+  .row output { text-align: right; color: #ffd27f; font-variant-numeric: tabular-nums; font-size: 11px; }
+  input[type=range] { width: 100%; accent-color: #7df0ff; }
+  input[type=color] { width: 100%; height: 28px; border: 1px solid #24304f; background: #0c1020; border-radius: 4px; padding: 2px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  button { background: #16203a; color: #eaf2ff; border: 1px solid #2c3d66; border-radius: 6px; padding: 7px 12px;
+    font: inherit; font-size: 11px; letter-spacing: 1px; cursor: pointer; }
+  button:hover { background: #22305a; }
+  button.on { background: #ffe24a; color: #000; border-color: #ffe24a; }
+  #st { position: fixed; bottom: 10px; right: 14px; font-size: 10px; color: #6b7f9e; }
+</style>
+</head>
+<body>
+<h1>ILLEGAL BEATZ — CONTROL</h1>
+<div class="sub">마우스로 조절. 게임 창(dual.html) 두 개에 실시간 반영되고 값은 저장됨 (새로고침해도 유지)</div>
+
+<div class="grid">
+  <div class="box" data-side="skate"><h2>🛹 SKATE 톤</h2>
+    <div class="row"><label>HUE</label><input type="range" data-k="skate.hue" min="-180" max="180" value="0"><output>0</output></div>
+    <div class="row"><label>SATURATE</label><input type="range" data-k="skate.sat" min="0" max="3" step="0.05" value="1"><output>1</output></div>
+    <div class="row"><label>CONTRAST</label><input type="range" data-k="skate.con" min="0.4" max="2.2" step="0.05" value="1"><output>1</output></div>
+    <div class="row"><label>BRIGHT</label><input type="range" data-k="skate.bri" min="0.3" max="2" step="0.05" value="1"><output>1</output></div>
+  </div>
+  <div class="box"><h2>🛸 FLIGHT 톤</h2>
+    <div class="row"><label>HUE</label><input type="range" data-k="flight.hue" min="-180" max="180" value="0"><output>0</output></div>
+    <div class="row"><label>SATURATE</label><input type="range" data-k="flight.sat" min="0" max="3" step="0.05" value="1"><output>1</output></div>
+    <div class="row"><label>CONTRAST</label><input type="range" data-k="flight.con" min="0.4" max="2.2" step="0.05" value="1"><output>1</output></div>
+    <div class="row"><label>BRIGHT</label><input type="range" data-k="flight.bri" min="0.3" max="2" step="0.05" value="1"><output>1</output></div>
+  </div>
+  <div class="box"><h2>⚡ STROBE</h2>
+    <div class="row"><label>로고 바탕</label><input type="color" data-k="logoBg" value="#ffffff"><output></output></div>
+    <div class="row"><label>로고 크기</label><input type="range" data-k="logoSize" min="30" max="120" value="72"><output>72</output></div>
+    <div class="row"><label>속도 Hz</label><input type="range" data-k="hz" min="0" max="24" step="0.5" value="0"><output>스틱</output></div>
+    <div class="row"><label>얼굴 시작색</label><input type="range" data-k="faceHue" min="0" max="360" value="300"><output>300</output></div>
+    <div class="row"><label>얼굴 색 회전</label><input type="range" data-k="faceStep" min="0" max="90" value="36"><output>36</output></div>
+    <div class="row"><label>얼굴 최소</label><input type="range" data-k="faceMin" min="5" max="100" value="22"><output>22</output></div>
+    <div class="row"><label>얼굴 최대</label><input type="range" data-k="faceMax" min="50" max="300" value="175"><output>175</output></div>
+    <div class="row"><label>얼굴 반복</label><input type="range" data-k="faceRepeat" min="1" max="30" value="10"><output>10</output></div>
+  </div>
+  <div class="box"><h2>🔁 INVERT (R1)</h2>
+    <div class="row"><label>디케이 s</label><input type="range" data-k="decay" min="0.1" max="2" step="0.05" value="0.7"><output>0.7</output></div>
+    <div class="row"><label>세기</label><input type="range" data-k="invMax" min="0.2" max="1" step="0.05" value="1"><output>1</output></div>
+  </div>
+</div>
+<div class="btns">
+  <button id="reset">전부 리셋</button>
+  <button id="black" class="">블랙아웃 (양쪽)</button>
+</div>
+<div id="st">—</div>
+
+<script>
+  const KEY = 'illegal.ctl';
+  const ch = new BroadcastChannel('illegal-input');
+  const defaults = {};
+  const ctl = {};
+  const els = [...document.querySelectorAll('[data-k]')];
+  for (const el of els) { defaults[el.dataset.k] = el.type === 'range' ? +el.value : el.value; }
+  Object.assign(ctl, defaults);
+  try { Object.assign(ctl, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (_) {}
+  ctl.black = false;
+
+  function paint() {
+    for (const el of els) {
+      const v = ctl[el.dataset.k]; el.value = v;
+      const o = el.parentElement.querySelector('output');
+      if (el.dataset.k === 'hz') o.textContent = v > 0 ? v : '스틱';
+      else if (el.type === 'range') o.textContent = v;
+    }
+    document.getElementById('black').classList.toggle('on', ctl.black);
+  }
+  function send() {
+    try { localStorage.setItem(KEY, JSON.stringify(ctl)); } catch (_) {}
+    ch.postMessage({ t: 'ctl', ctl });
+    document.getElementById('st').textContent = '전송 ' + new Date().toLocaleTimeString();
+  }
+  for (const el of els) el.addEventListener('input', () => {
+    ctl[el.dataset.k] = el.type === 'range' ? +el.value : el.value; paint(); send();
+  });
+  document.getElementById('reset').addEventListener('click', () => { Object.assign(ctl, defaults); ctl.black = false; paint(); send(); });
+  document.getElementById('black').addEventListener('click', () => { ctl.black = !ctl.black; paint(); send(); });
+  paint(); send();
+  setInterval(send, 3000);   // 게임 창이 나중에 열려도 3초 안에 받음
+</script>
+</body>
+</html>

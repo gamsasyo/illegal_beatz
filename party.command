@@ -20,6 +20,8 @@ swift "$TMP/disp.swift" 2>/dev/null | sort -n > "$TMP/ext.txt"
 N=$(wc -l < "$TMP/ext.txt" | tr -d ' ')
 
 osascript -e 'tell application "Google Chrome" to close (every tab of every window whose URL contains "dual.html")' 2>/dev/null
+open -a "Google Chrome" "http://localhost:8899/control.html"   # 컨트롤 패널 (노트북 화면, 마우스로 톤/스트로브 조절)
+sleep 0.5
 if [ "$N" -ge 2 ]; then
   read lx ly lw lh < <(sed -n 1p "$TMP/ext.txt"); read rx ry rw rh < <(sed -n 2p "$TMP/ext.txt")
   osascript <<AS
