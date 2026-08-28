@@ -81,7 +81,7 @@
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
-  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>스트로브 <b>R1</b>반전 <b>L2</b>블랙 &nbsp;·&nbsp; <b>L2+R2</b> 오토파일럿</div>
+  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>반전 <b>L2</b>얼굴 &nbsp;·&nbsp; <b>L2+R2</b> 오토파일럿</div>
   <div class="st" id="st">MANUAL</div>
   <div class="fx" id="fxst"></div>
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
@@ -343,13 +343,18 @@
   // ───────────────── FX (VJ 스트로브) ─────────────────
   // 게임 조작에 안 쓰는 버튼에만 물림. 오버레이 1장 + .wrap 필터로 처리 —
   // 게임 렌더 루프는 전혀 안 건드리므로 프레임 손해가 없음.
-  const FX_HOLD = { 4:'strobe', 5:'invert', 6:'black' };   // L1 / R1 / L2  (□/○ 는 트릭에 양보)
+  const FX_HOLD = { 4:'strobe', 5:'invert', 6:'faces' };   // L1 로고 스트로브 / R1 반전 / L2 얼굴 셋 스트로브
   const FX_TAP  = {};
-  const fxOn = { strobe:false, invert:false, black:false, hue:false };
+  const fxOn = { strobe:false, invert:false, faces:false, hue:false };
   let strobeHz = 12, flashUntil = 0, tapPrev = {};
   const FX_LOGO = "#fff url('bitmap/Brick.png') center / 72% auto no-repeat";   // 로고 크기 = 프레임 폭의 72%
   let fxBgNow = '';
   new Image().src = 'bitmap/Brick.png';           // 미리 로드 — 첫 스트로브에 빈 흰 화면 안 뜨게
+  // L2 = 크루 얼굴 셋이 번갈아 (SAWTEETH → SHINS → BEAUTIFUL DISCO). 흰 바탕, 프레임 높이의 62%
+  const FX_FACES = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
+    const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u;
+    return "#fff url('" + u + "') center / auto 62% no-repeat";
+  });
   const $fx = document.getElementById('fx'), $wrap = document.querySelector('.wrap');
 
   function fxRead(b, ax) {
@@ -371,8 +376,9 @@
     const t = performance.now();
     // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
     let bg = FX_LOGO, op = 0;
-    if (fxOn.black) { bg = '#000'; op = 1; }
-    else if (fxOn.strobe) op = (Math.floor(t / 1000 * strobeHz * 2) % 2) ? 1 : 0;
+    const ph = Math.floor(t / 1000 * strobeHz * 2);          // 반주기 카운터 (홀수 = 켜짐)
+    if (fxOn.faces) { bg = FX_FACES[Math.floor(ph / 2) % 3]; op = (ph % 2) ? 1 : 0; }   // 켜질 때마다 다음 얼굴
+    else if (fxOn.strobe) op = (ph % 2) ? 1 : 0;
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
     if (bg !== fxBgNow) { fxBgNow = bg; $fx.style.background = bg; }   // 매 프레임 background 재설정 방지
     $fx.style.opacity = op;
@@ -391,7 +397,7 @@
   fxDraw();
 
   // 패드 없이 테스트용 — 숫자키 (게임엔 전달 안 되는 키라 충돌 없음)
-  const FX_KEY = { Digit1:'strobe', Digit2:'invert', Digit3:'black', Digit4:'hue' };
+  const FX_KEY = { Digit1:'strobe', Digit2:'invert', Digit3:'faces', Digit4:'hue' };
   addEventListener('keydown', e => {
     if (e.code === 'Digit5') flashUntil = performance.now() + 220;
     if (FX_KEY[e.code]) fxOn[FX_KEY[e.code]] = true;
