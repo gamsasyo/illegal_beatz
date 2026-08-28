@@ -89,7 +89,7 @@
 <div id="dbg" class="hidden"></div>
 <div id="boot"><div><div class="c">한 키보드로 스케이트보드 + 비행기를 동시에.<br>같은 WASD·SPACE 신호가 두 게임에 똑같이 들어감.</div>
   <div class="go">▶ 클릭해서 시작 (키보드 포커스)</div>
-  <div class="c" style="margin-top:16px;font-size:12px;color:#6b7f9e">H — HUD 토글 &nbsp;·&nbsp; M — 프레임 조정(천장 캔버스 맞춤) &nbsp;·&nbsp; P — 패드 디버그</div></div></div>
+  <div class="c" style="margin-top:16px;font-size:12px;color:#6b7f9e">F — 전체화면 &nbsp;·&nbsp; H — HUD 토글 &nbsp;·&nbsp; M — 프레임 조정(천장 캔버스 맞춤) &nbsp;·&nbsp; P — 패드 디버그</div></div></div>
 
 <script>
   // ───────────────── 창 모드 ─────────────────
@@ -114,20 +114,40 @@
   const FRAME_KEY = 'frame:' + (SIDE || 'dual');
   let frame = null, adjusting = false;
   try { frame = JSON.parse(localStorage.getItem(FRAME_KEY)); } catch (_) {}
-  function fullFrame() { return { x: 0, y: 0, w: innerWidth, h: innerHeight }; }
+  // auto:true = 아직 손으로 안 맞춘 상태 → 창 크기가 바뀌면(프로젝터로 옮김, 풀스크린) 항상 꽉 채움.
+  // 이게 없으면 작은 창에서 로드된 크기가 저장돼 프로젝터에선 여백이 남는다.
+  function fullFrame() { return { x: 0, y: 0, w: innerWidth, h: innerHeight, auto: true }; }
+  addEventListener('resize', () => { if (frame.auto) { frame = fullFrame(); applyFrame(); } });
+  function scaleFrame(k) {                      // 중심 고정 비례 확대/축소
+    const cx = frame.x + frame.w / 2, cy = frame.y + frame.h / 2;
+    frame.w = Math.round(frame.w * k); frame.h = Math.round(frame.h * k);
+    frame.x = Math.round(cx - frame.w / 2); frame.y = Math.round(cy - frame.h / 2);
+  }
   if (!frame || !(frame.w > 0 && frame.h > 0)) frame = fullFrame();
+  if (frame.auto === undefined) frame = fullFrame();          // 옛 버전에서 저장된 값 = 손으로 안 맞춘 것
   const $wrapEl = document.querySelector('.wrap');
   function applyFrame() {
-    $wrapEl.style.left = frame.x + 'px'; $wrapEl.style.top = frame.y + 'px';
-    $wrapEl.style.width = frame.w + 'px'; $wrapEl.style.height = frame.h + 'px';
+    if (frame.auto) {                               // 자동 = CSS 로 꽉 채움 (resize 이벤트 안 와도 맞음)
+      $wrapEl.style.left = '0'; $wrapEl.style.top = '0'; $wrapEl.style.width = '100vw'; $wrapEl.style.height = '100vh';
+      frame.x = 0; frame.y = 0; frame.w = innerWidth; frame.h = innerHeight;
+    } else {
+      $wrapEl.style.left = frame.x + 'px'; $wrapEl.style.top = frame.y + 'px';
+      $wrapEl.style.width = frame.w + 'px'; $wrapEl.style.height = frame.h + 'px';
+    }
     document.getElementById('frameTxt').innerHTML =
       '<b>FRAME ' + (SIDE || 'dual').toUpperCase() + '</b> &nbsp; x ' + frame.x + ' &nbsp; y ' + frame.y +
       ' &nbsp; w ' + frame.w + ' &nbsp; h ' + frame.h + '<br>' +
-      '<b>←↑↓→</b> 이동 &nbsp; <b>A/D</b> 폭 &nbsp; <b>W/S</b> 높이 &nbsp; <b>Shift</b> ×10 &nbsp; <b>R</b> 리셋 &nbsp; <b>M</b> 저장·닫기';
+      '<b>+ / −</b> 스케일 &nbsp; <b>←↑↓→</b> 이동 &nbsp; <b>A/D</b> 폭 &nbsp; <b>W/S</b> 높이 &nbsp; <b>Shift</b> ×10 &nbsp; <b>R</b> 리셋 &nbsp; <b>M</b> 저장·닫기';
     try { localStorage.setItem(FRAME_KEY, JSON.stringify(frame)); } catch (_) {}
   }
   applyFrame();
+  // F = 브라우저 전체화면 (Fullscreen API). ⌃⌘F 가 프로젝터 창에서 잘 안 먹어서 페이지가 직접 건다.
   addEventListener('keydown', e => {
+    if (e.code === 'KeyF' && !e.repeat) {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+      return;
+    }
     if (e.code === 'KeyM' && !e.repeat) {
       adjusting = !adjusting; document.body.classList.toggle('adjust', adjusting); applyFrame(); return;
     }
@@ -139,10 +159,12 @@
       case 'ArrowUp':    frame.y -= d; break;   case 'ArrowDown':  frame.y += d; break;
       case 'KeyA':       frame.w -= d; break;   case 'KeyD':       frame.w += d; break;
       case 'KeyS':       frame.h -= d; break;   case 'KeyW':       frame.h += d; break;
+      case 'Equal': case 'NumpadAdd':      scaleFrame(1 + d * 0.01); break;   // + 확대 (비율 유지, 중심 고정)
+      case 'Minus': case 'NumpadSubtract': scaleFrame(1 - d * 0.01); break;   // - 축소
       case 'KeyR':       frame = fullFrame(); break;
       default: hit = false;
     }
-    if (hit) { frame.w = Math.max(80, frame.w); frame.h = Math.max(60, frame.h); applyFrame(); e.preventDefault(); }
+    if (hit) { if (e.code !== 'KeyR') frame.auto = false; frame.w = Math.max(80, frame.w); frame.h = Math.max(60, frame.h); applyFrame(); e.preventDefault(); }
   }, true);
 
   // ───────────────── 창 간 입력 릴레이 ─────────────────
@@ -212,6 +234,7 @@
   const DEAD = 0.35;          // 스틱 데드존 (블루투스 PS패드는 드리프트가 좀 있음)
   const padPrev = {};         // 신호명 → 현재 눌림 상태
   let padId = '', padDbg = false, padRunning = false;
+  let fpsN = 0, fpsT0 = performance.now(), fpsVal = 0;
 
   function padSend(sig, down) {
     if (!!padPrev[sig] === down) return;             // 변화 없으면 안 쏨
@@ -227,6 +250,9 @@
 
   function padPoll() {
     padRunning = true;
+    // fps 측정 (셸 창 기준 — 게임 iframe 도 같은 rAF 를 탐)
+    fpsN++; const fpsNow = performance.now();
+    if (fpsNow - fpsT0 > 1000) { fpsVal = Math.round(fpsN * 1000 / (fpsNow - fpsT0)); fpsN = 0; fpsT0 = fpsNow; }
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     let gp = null;
     for (const p of pads) if (p && p.connected) { gp = p; break; }
@@ -270,7 +296,7 @@
       const hit = [];
       for (let i = 0; i < b.length; i++) if (b[i] && b[i].pressed) hit.push(i);
       document.getElementById('dbg').textContent =
-        'BTN [' + hit.join(' ') + ']  AXES ' +
+        'FPS ' + fpsVal + '  BTN [' + hit.join(' ') + ']  AXES ' +
         Array.from(ax).map(v => v.toFixed(2)).join(' ');
     }
     requestAnimationFrame(padPoll);
