@@ -819,7 +819,7 @@ function update(dt) {
   // UFO: W 를 눌러야 앞으로 감. 안 누르면 그 자리에서 호버 (skate 처럼 '앞'이 입력). S = 빨리 멈춤
   const thrust = !autopilot && keys['KeyW'];
   const _tgt = (autopilot||boosting) ? boostSpeed : (thrust ? baseSpeed : 0);
-  speed += (_tgt - speed) * (_tgt > speed ? 0.17 : (keys['KeyS'] ? 0.15 : 0.04));   // 붙을 땐 빠르게, 놓으면 미끄러지듯, S 는 브레이크
+  speed += (_tgt - speed) * (_tgt > speed ? 0.17 : (keys['KeyS'] ? 0.15 : 0.018));  // 붙을 땐 빠르게, 놓으면 관성으로 한참 미끄러짐(~2s), S 는 브레이크
 
   // ===== 레일 + 오프셋 =====
   railS += speed*dt*60;

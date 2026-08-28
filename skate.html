@@ -1034,7 +1034,10 @@ const P = {
   board: { flip: 0, target: 0, shuv: 0, shuvTarget: 0, amt: 0 },   // flip=킥플립(Z), shuv=셔빗(Y), amt=발 들기 블렌드
 };
 // ★ 점프 감 — 평지 올리는 짧고 탁(GRAV 32/JUMP 9.5: 체공 0.6s), 램프는 rampLaunch 에서 따로 크게
-const GRAV = 29, JUMP = 10.2, ACCEL = 11, MAXSPD = 22, FRICTION = 4;   // 26/11(길다) 과 32/9.5(짧다) 사이
+const GRAV = 29, JUMP = 10.2, ACCEL = 11, MAXSPD = 22;   // 26/11(길다) 과 32/9.5(짧다) 사이
+// 마찰 10.5 > 내리막 밀어주는 힘 7.9 (SLOPE·34) → W 안 누르면 결국 감속해 멈춤 (약 -2.6 m/s², 22→0 에 8s).
+// W 누르면 11 + 7.9 - 10.5 = +8.4 로 충분히 가속. UFO 의 '안 누르면 호버'와 짝 맞춤
+const FRICTION = 10.5;
 // ★ 차선 목표 노브 — LANE_MAX 는 트릭 존 한계(킥커 ±2 폭≤14, 레일 ±5.5, 차선 9 안쪽)
 const LANE_MAX = 7.5, LANE_RATE = 22, IDLE_T = 2.0, CRUISE_MIN = MAXSPD * 0.55;   // ★ LANE_RATE = 방향키 감도
 const DOWNHILL_CAP = 1.2;   // ★ 내리막 최고속 배율 (MAXSPD 22 × 1.2 = 26). 1.7 은 너무 빨랐음
