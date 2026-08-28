@@ -8,7 +8,24 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #000;
     font-family: ui-monospace, "SF Mono", Menlo, monospace; color: #eaf2ff; }
-  .wrap { display: flex; width: 100vw; height: 100vh; }
+  /* .wrap = 프로젝터 캔버스에 맞추는 프레임. 바깥은 검정. 위치/크기는 JS(applyFrame) 가 px 로 박음 */
+  .wrap { display: flex; position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; overflow: hidden; }
+  body.side .pane { flex: 1 1 100%; }
+  body.side .pane + .pane { display: none; }
+  /* 조정 모드(M) — 프레임 테두리 + 격자 + 수치 */
+  #frameHud { position: absolute; inset: 0; z-index: 26; pointer-events: none; display: none;
+    border: 3px solid #ff3c5a; box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+    background-image: linear-gradient(rgba(125,240,255,.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(125,240,255,.35) 1px, transparent 1px);
+    background-size: 10% 10%; }
+  #frameHud:before, #frameHud:after { content: ''; position: absolute; background: #ff3c5a; }
+  #frameHud:before { left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; }
+  #frameHud:after  { top: 50%; left: 0; right: 0; height: 2px; margin-top: -1px; }
+  #frameTxt { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 27;
+    background: rgba(8,10,18,.9); border: 1px solid #ff3c5a; border-radius: 8px; padding: 12px 18px;
+    font-size: 13px; line-height: 1.8; letter-spacing: 1px; text-align: center; display: none; pointer-events: none; }
+  #frameTxt b { color: #ffe24a; }
+  body.adjust #frameHud, body.adjust #frameTxt { display: block; }
   .pane { position: relative; flex: 1 1 50%; height: 100%; overflow: hidden; }
   .pane + .pane { border-left: 2px solid #1a2540; }
   iframe { width: 100%; height: 100%; border: 0; display: block; }
@@ -58,6 +75,7 @@
     <iframe id="a" data-src="skate.html?autostart=1&dual=1" title="skate"></iframe></div>
   <div class="pane"><div class="tag r">✈ FLIGHT</div>
     <iframe id="b" data-src="flight.html?autostart=1&dual=1" title="flight"></iframe></div>
+  <div id="frameHud"></div>
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
@@ -67,23 +85,88 @@
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
 </div>
 <div id="fx"></div>
+<div id="frameTxt"></div>
 <div id="dbg" class="hidden"></div>
 <div id="boot"><div><div class="c">한 키보드로 스케이트보드 + 비행기를 동시에.<br>같은 WASD·SPACE 신호가 두 게임에 똑같이 들어감.</div>
   <div class="go">▶ 클릭해서 시작 (키보드 포커스)</div>
-  <div class="c" style="margin-top:16px;font-size:12px;color:#6b7f9e">H — HUD 토글 &nbsp;·&nbsp; P — 패드 디버그</div></div></div>
+  <div class="c" style="margin-top:16px;font-size:12px;color:#6b7f9e">H — HUD 토글 &nbsp;·&nbsp; M — 프레임 조정(천장 캔버스 맞춤) &nbsp;·&nbsp; P — 패드 디버그</div></div></div>
 
 <script>
-  const frames = [document.getElementById('a'), document.getElementById('b')];
+  // ───────────────── 창 모드 ─────────────────
+  //   dual.html              한 창에 두 게임 (모니터 하나 / 매퍼로 쪼갤 때)
+  //   dual.html?side=skate   프로젝터 1 창 — skate 만
+  //   dual.html?side=flight  프로젝터 2 창 — flight 만
+  // side 창들끼리는 BroadcastChannel 로 입력을 공유하므로 패드/키보드는 한 창에만 있으면 된다.
+  const SIDE = new URLSearchParams(location.search).get('side');   // 'skate' | 'flight' | null
+  if (SIDE === 'flight') document.querySelector('.wrap').prepend(document.querySelectorAll('.pane')[1]);
+  if (SIDE) document.body.classList.add('side');
+  const frames = SIDE === 'skate'  ? [document.getElementById('a')]
+               : SIDE === 'flight' ? [document.getElementById('b')]
+               : [document.getElementById('a'), document.getElementById('b')];
   // 캐시버스터 — 주소가 같으면 브라우저가 옛날 게임 파일을 그대로 물고 있음.
   // 튜닝값 고치고 새로고침했는데 화면이 안 바뀌는 사고를 막는다.
   for (const f of frames) f.src = f.dataset.src + '&v=' + Date.now();
+  document.querySelectorAll('iframe').forEach(f => { if (frames.indexOf(f) < 0) f.remove(); });   // 안 쓰는 게임은 아예 안 띄움 (GPU)
+
+  // ───────────────── 프레임 (천장 캔버스에 맞추기) ─────────────────
+  // 오토 키스톤은 프로젝터가, "캔버스 안에만 그리기"는 여기서. 바깥은 검정.
+  // M 으로 조정 모드: 화살표 = 이동, W/S = 높이, A/D = 폭, Shift = ×10, R = 리셋. 값은 창(side)별로 저장.
+  const FRAME_KEY = 'frame:' + (SIDE || 'dual');
+  let frame = null, adjusting = false;
+  try { frame = JSON.parse(localStorage.getItem(FRAME_KEY)); } catch (_) {}
+  function fullFrame() { return { x: 0, y: 0, w: innerWidth, h: innerHeight }; }
+  if (!frame || !(frame.w > 0 && frame.h > 0)) frame = fullFrame();
+  const $wrapEl = document.querySelector('.wrap');
+  function applyFrame() {
+    $wrapEl.style.left = frame.x + 'px'; $wrapEl.style.top = frame.y + 'px';
+    $wrapEl.style.width = frame.w + 'px'; $wrapEl.style.height = frame.h + 'px';
+    document.getElementById('frameTxt').innerHTML =
+      '<b>FRAME ' + (SIDE || 'dual').toUpperCase() + '</b> &nbsp; x ' + frame.x + ' &nbsp; y ' + frame.y +
+      ' &nbsp; w ' + frame.w + ' &nbsp; h ' + frame.h + '<br>' +
+      '<b>←↑↓→</b> 이동 &nbsp; <b>A/D</b> 폭 &nbsp; <b>W/S</b> 높이 &nbsp; <b>Shift</b> ×10 &nbsp; <b>R</b> 리셋 &nbsp; <b>M</b> 저장·닫기';
+    try { localStorage.setItem(FRAME_KEY, JSON.stringify(frame)); } catch (_) {}
+  }
+  applyFrame();
+  addEventListener('keydown', e => {
+    if (e.code === 'KeyM' && !e.repeat) {
+      adjusting = !adjusting; document.body.classList.toggle('adjust', adjusting); applyFrame(); return;
+    }
+    if (!adjusting) return;
+    const d = e.shiftKey ? 10 : 2;
+    let hit = true;
+    switch (e.code) {
+      case 'ArrowLeft':  frame.x -= d; break;   case 'ArrowRight': frame.x += d; break;
+      case 'ArrowUp':    frame.y -= d; break;   case 'ArrowDown':  frame.y += d; break;
+      case 'KeyA':       frame.w -= d; break;   case 'KeyD':       frame.w += d; break;
+      case 'KeyS':       frame.h -= d; break;   case 'KeyW':       frame.h += d; break;
+      case 'KeyR':       frame = fullFrame(); break;
+      default: hit = false;
+    }
+    if (hit) { frame.w = Math.max(80, frame.w); frame.h = Math.max(60, frame.h); applyFrame(); e.preventDefault(); }
+  }, true);
+
+  // ───────────────── 창 간 입력 릴레이 ─────────────────
+  // 키보드는 포커스된 창에만 오고, 패드는 창마다 보일 수도 안 보일 수도 있다.
+  // 규칙: 키보드 이벤트는 항상 전파·적용. 패드 이벤트는 "내 창에 패드가 없을 때만" 적용 (있으면 이미 로컬로 받았음 → 중복 방지).
+  const relay = ('BroadcastChannel' in window) ? new BroadcastChannel('illegal-input') : null;
+  window.__relay = { tx: 0, rx: 0 };
+  function relaySend(msg) { if (relay) { relay.postMessage(msg); window.__relay.tx++; } }
+  if (relay) relay.onmessage = ({ data }) => {
+    window.__relay.rx++;
+    document.getElementById('boot').classList.add('hidden');            // 다른 창이 시작했으면 이 창도 시작
+    if (data.t === 'fx') { if (!padId) { Object.assign(fxOn, data.on); strobeHz = data.hz; } return; }
+    if (data.src === 'pad' && padId) return;                              // 내 패드가 있으면 중복
+    forward(data.t, { code: data.code, key: data.key, repeat: data.repeat, preventDefault(){} }, true);
+  };
   const FWD = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyE', 'KeyI', 'KeyJ', 'KeyK', 'KeyL'];   // IJKL = 트릭
   let apOn = false;
 
   // 한 입력을 두 iframe 게임에 동일하게 전달 (합성 KeyboardEvent)
-  function forward(type, e) {
+  function forward(type, e, relayed) {
+    if (adjusting) return;                            // 프레임 조정 중엔 게임에 안 보냄
     if (FWD.indexOf(e.code) < 0) return;
     if (e.code === 'Space') e.preventDefault();       // 페이지 스크롤 방지
+    if (!relayed) relaySend({ t: type, code: e.code, key: e.key, repeat: !!e.repeat, src: e.__src || 'kb' });
     if (type === 'keydown' && e.code === 'KeyE' && !e.repeat) {
       apOn = !apOn; document.getElementById('st').textContent = apOn ? 'AUTOPILOT (정답 패스 자동)' : 'MANUAL';
     }
@@ -133,8 +216,9 @@
   function padSend(sig, down) {
     if (!!padPrev[sig] === down) return;             // 변화 없으면 안 쏨
     padPrev[sig] = down;
-    dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup',
-      { code: sig, key: sig, repeat: false, bubbles: true }));
+    const ev = new KeyboardEvent(down ? 'keydown' : 'keyup', { code: sig, key: sig, repeat: false, bubbles: true });
+    ev.__src = 'pad';                                  // 릴레이 중복 판정용 (키보드와 구분)
+    dispatchEvent(ev);
   }
   function padReleaseAll() {
     for (const s in padPrev) padSend(s, false);
@@ -241,7 +325,11 @@
     }
     // 오른쪽 스틱 상하 = 스트로브 속도 (위로 밀면 빨라짐, 4~24Hz)
     strobeHz = 14 - (ax[3] || 0) * 10;
+    // 다른 창에도 같은 FX (상태가 바뀔 때만 전송)
+    const sig = JSON.stringify(fxOn) + '|' + strobeHz.toFixed(1);
+    if (sig !== fxLastSig) { fxLastSig = sig; relaySend({ t: 'fx', on: fxOn, hz: strobeHz }); }
   }
+  let fxLastSig = '';
 
   function fxDraw() {
     const t = performance.now();
