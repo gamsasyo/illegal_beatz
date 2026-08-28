@@ -690,6 +690,7 @@ let railS = 0;               // 레일 진행 좌표
 const BOOST_MAX = 2.5;        // 총 부스트 게이지 용량
 let boost = 1.0;             // 시작 보유량
 let boostCam = 0;            // 오토파일럿 프레이밍 (캐릭터 클로즈업 — VJ 모드용)
+let trickCam = 0;            // 트릭 쇼 클로즈업 (IJKL)
 let spdFov  = 0;             // 수동 부스트 속도감 (화각 확대 + 뒤로 빠짐). 둘을 섞으면 서로 상쇄됨
 let score = 0, combo = 0, comboTimer = 0;
 const comboEl = document.getElementById('combo'), comboNumEl = comboEl.querySelector('.num');
@@ -1000,14 +1001,17 @@ function update(dt) {
 
   // camera — 부스트/오토시 캐릭터로 바짝 당겨 크게 (boostCam 보간 = 끊김 없음)
   boostCam += (((boosting||autopilot)?1:0) - boostCam) * 0.08;                         // 부스트도 오토처럼 클로즈업
+  // 트릭 버튼(IJKL) 쇼 중엔 캐릭터에 더 바짝 — LP 가 거대하게 보임. 붙을 땐 빠르게, 풀릴 땐 천천히
+  const trickOn = jumpT < 1 ? 1 : 0;
+  trickCam += (trickOn - trickCam) * (trickOn ? 0.22 : 0.06);
   spdFov  += (((boosting && !autopilot)?1:0) - spdFov) * 0.18;                         // 수동 부스트는 빠르게 반응
   // ★ 카메라는 비행기의 시각 틸트(yawVis/pitchVis/bank)가 아니라 레일 자세(railQ)를 따른다.
   //   plane.quaternion 을 따르면 키 누를 때마다 세상 전체가 확 기울어 '확확 바뀌는' 느낌이 남.
-  _desired.set(0, 2.4 - 0.2*boostCam, 9 - 4.0*boostCam).applyQuaternion(railQ).add(plane.position);   // 부스트/오토 = 캐릭터로 바짝
+  _desired.set(0, 2.4 - 0.2*boostCam - 0.9*trickCam, 9 - 4.0*boostCam - 3.2*trickCam).applyQuaternion(railQ).add(plane.position);   // 부스트/오토 = 바짝, 트릭 = 더 바짝
   camera.position.lerp(_desired, 0.06 + 0.45*boostCam + 0.16*spdFov);  // 0.1→0.06 더 느긋하게
   _headW.set(0, 1.2, 0.05).applyQuaternion(plane.quaternion).add(plane.position);      // 캐릭터(머리) 위치
   _railFwd.set(0,0,-1).applyQuaternion(railQ);                                         // 시선도 레일 방향 (틸트에 안 흔들림)
-  camTarget.copy(plane.position).addScaledVector(_railFwd, 12).lerp(_headW, boostCam*0.6);  // 부스트시 캐릭터로 프레이밍 (비행기 전체 보이게)
+  camTarget.copy(plane.position).addScaledVector(_railFwd, 12).lerp(_headW, Math.min(1, boostCam*0.6 + trickCam*0.9));   // 트릭 땐 머리를 프레이밍  // 부스트시 캐릭터로 프레이밍 (비행기 전체 보이게)
   camera.up.set(0,1,0).applyQuaternion(railQ).applyAxisAngle(_railFwd, bank*0.18);   // 롤은 살짝만 (0.7→0.18)
   camera.lookAt(camTarget);
   // ★ 부스트 = 화각 확대. 좁히면 눈엔 '느려짐'으로 읽혀서 실제 2.2배 속도가 상쇄됨
