@@ -61,6 +61,13 @@
     <div class="row"><label>얼굴 최대</label><input type="range" data-k="faceMax" min="50" max="300" value="175"><output>175</output></div>
     <div class="row"><label>얼굴 반복</label><input type="range" data-k="faceRepeat" min="1" max="30" value="10"><output>10</output></div>
   </div>
+  <div class="box"><h2>🎤 마이크 킥 → 인버트</h2>
+    <div class="btns"><button id="mic">🎤 마이크 켜기</button></div>
+    <div class="row"><label>감도</label><input type="range" id="micSens" min="1.2" max="4" step="0.1" value="2.2"><output>2.2</output></div>
+    <div class="row"><label>최소 간격 ms</label><input type="range" id="micGap" min="80" max="600" step="10" value="220"><output>220</output></div>
+    <div class="row"><label>저음 레벨</label><div style="height:12px;background:#0c1020;border:1px solid #24304f;border-radius:3px;position:relative"><div id="micBar" style="position:absolute;left:0;top:0;bottom:0;width:0;background:#7df0ff"></div><div id="micThr" style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#ff3c5a;left:0"></div></div><output id="micHits">0</output></div>
+    <div class="sub" style="margin:6px 0 0">베이스 킥(40~150Hz)이 평균보다 "감도"배 크면 한 번 펄스. 빨간 선 = 현재 문턱</div>
+  </div>
   <div class="box"><h2>🔁 INVERT (R1)</h2>
     <div class="row"><label>디케이 s</label><input type="range" data-k="decay" min="0.1" max="2" step="0.05" value="0.7"><output>0.7</output></div>
     <div class="row"><label>세기</label><input type="range" data-k="invMax" min="0.2" max="1" step="0.05" value="1"><output>1</output></div>
@@ -106,7 +113,37 @@
   document.getElementById('reset').addEventListener('click', () => { Object.assign(ctl, defaults); ctl.black = false; paint(); send(); });
   document.getElementById('black').addEventListener('click', () => { ctl.black = !ctl.black; paint(); send(); });
   paint(); send();
-  setInterval(send, 3000);   // 게임 창이 나중에 열려도 3초 안에 받음
+  setInterval(send, 3000);
+
+  // ── 마이크 킥 감지 → 'kick' 브로드캐스트 (게임 창이 R1 탭과 똑같이 인버트 펄스) ──
+  let micOn = false, ac = null, an = null, buf = null, avg = 0, lastKick = 0, hits = 0;
+  const micBtn = document.getElementById('mic'), sensEl = document.getElementById('micSens'), gapEl = document.getElementById('micGap');
+  for (const el of [sensEl, gapEl]) el.addEventListener('input', () => el.parentElement.querySelector('output').textContent = el.value);
+  micBtn.addEventListener('click', async () => {
+    if (micOn) { micOn = false; micBtn.textContent = '🎤 마이크 켜기'; micBtn.classList.remove('on'); if (ac) ac.close(); ac = null; return; }
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      an = ac.createAnalyser(); an.fftSize = 1024; an.smoothingTimeConstant = 0.2;
+      ac.createMediaStreamSource(st).connect(an); buf = new Uint8Array(an.frequencyBinCount);
+      micOn = true; micBtn.textContent = '🎤 듣는 중 — 끄기'; micBtn.classList.add('on'); micLoop();
+    } catch (e) { micBtn.textContent = '🎤 마이크 거부됨'; }
+  });
+  function micLoop() {
+    if (!micOn) return;
+    an.getByteFrequencyData(buf);
+    const hz = ac.sampleRate / an.fftSize;                       // bin 당 Hz (~47)
+    let e = 0, n = 0; for (let i = Math.max(1, Math.round(40 / hz)); i <= Math.round(150 / hz); i++) { e += buf[i]; n++; }
+    e /= n;                                                      // 저음 에너지 0..255
+    avg += (e - avg) * 0.02;                                     // 느린 평균 (곡 전체 레벨)
+    const thr = Math.max(28, avg * +sensEl.value);
+    const now = performance.now();
+    if (e > thr && now - lastKick > +gapEl.value) { lastKick = now; hits++; ch.postMessage({ t: 'kick' }); }
+    document.getElementById('micBar').style.width = (e / 255 * 100) + '%';
+    document.getElementById('micThr').style.left = Math.min(100, thr / 255 * 100) + '%';
+    document.getElementById('micHits').textContent = hits;
+    requestAnimationFrame(micLoop);
+  }   // 게임 창이 나중에 열려도 3초 안에 받음
 </script>
 </body>
 </html>
