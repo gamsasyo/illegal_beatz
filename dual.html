@@ -102,7 +102,7 @@
 <div id="dbg" class="hidden"></div>
 <div id="boot"><div><div class="c">한 키보드로 스케이트보드 + 비행기를 동시에.<br>같은 WASD·SPACE 신호가 두 게임에 똑같이 들어감.</div>
   <div class="go">▶ 클릭해서 시작 (키보드 포커스)</div>
-  <div class="c" style="margin-top:16px;font-size:12px;color:#6b7f9e">F — 전체화면 &nbsp;·&nbsp; H — HUD 토글 &nbsp;·&nbsp; M — 프레임 조정(천장 캔버스 맞춤) &nbsp;·&nbsp; P — 패드 디버그</div></div></div>
+  <div class="c" style="margin-top:16px;font-size:12px;color:#6b7f9e">F — 전체화면 &nbsp;·&nbsp; K — 네 모서리 드래그(천장 캔버스 맞춤, R 리셋) &nbsp;·&nbsp; H — HUD &nbsp;·&nbsp; P — 패드 디버그</div></div></div>
 
 <script>
   // ───────────────── 창 모드 ─────────────────
@@ -125,14 +125,13 @@
   // 오토 키스톤은 프로젝터가, "캔버스 안에만 그리기"는 여기서. 바깥은 검정.
   // M 으로 조정 모드: 화살표 = 이동, W/S = 높이, A/D = 폭, Shift = ×10, R = 리셋. 값은 창(side)별로 저장.
   const FRAME_KEY = 'frame:' + (SIDE || 'dual');
-  let frame = null, adjusting = false;
+  let frame = null;
   try { frame = JSON.parse(localStorage.getItem(FRAME_KEY)); } catch (_) {}
   // auto:true = 아직 손으로 안 맞춘 상태 → 창 크기가 바뀌면(프로젝터로 옮김, 풀스크린) 항상 꽉 채움.
   // 이게 없으면 작은 창에서 로드된 크기가 저장돼 프로젝터에선 여백이 남는다.
   function fullFrame() { return { x: 0, y: 0, w: innerWidth, h: innerHeight, auto: true }; }
   addEventListener('resize', () => {
     if (frame.auto) { frame = fullFrame(); applyFrame(); }
-    else if (frame.pct) applyCtl(ctl);                       // % 프레임은 창 크기 바뀌면 다시 계산 (프로젝터로 옮길 때)
   });
   function scaleFrame(k) {                      // 중심 고정 비례 확대/축소
     const cx = frame.x + frame.w / 2, cy = frame.y + frame.h / 2;
@@ -140,7 +139,7 @@
     frame.x = Math.round(cx - frame.w / 2); frame.y = Math.round(cy - frame.h / 2);
   }
   if (!frame || !(frame.w > 0 && frame.h > 0)) frame = fullFrame();
-  if (frame.auto === undefined) frame = fullFrame();          // 옛 버전에서 저장된 값 = 손으로 안 맞춘 것
+  frame = fullFrame();                                        // ★ 프레임은 항상 창 전체. 매핑은 K(네 모서리 드래그)로만
   const $wrapEl = document.querySelector('.wrap');
   function applyFrame() {
     if (frame.auto) {                               // 자동 = CSS 로 꽉 채움 (resize 이벤트 안 와도 맞음)
@@ -207,30 +206,12 @@
     if (e.code === 'KeyR' && document.body.classList.contains('corner')) { corners = null; localStorage.removeItem(CORNER_KEY); applyFrame(); }
   });
 
+  // F = 브라우저 전체화면 (Fullscreen API)
   addEventListener('keydown', e => {
     if (e.code === 'KeyF' && !e.repeat) {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen().catch(() => {});
-      return;
+      if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {});
     }
-    if (e.code === 'KeyM' && !e.repeat) {
-      adjusting = !adjusting; document.body.classList.toggle('adjust', adjusting); applyFrame(); return;
-    }
-    if (!adjusting) return;
-    const d = e.shiftKey ? 10 : 2;
-    let hit = true;
-    switch (e.code) {
-      case 'ArrowLeft':  frame.x -= d; break;   case 'ArrowRight': frame.x += d; break;
-      case 'ArrowUp':    frame.y -= d; break;   case 'ArrowDown':  frame.y += d; break;
-      case 'KeyA':       frame.w -= d; break;   case 'KeyD':       frame.w += d; break;
-      case 'KeyS':       frame.h -= d; break;   case 'KeyW':       frame.h += d; break;
-      case 'Equal': case 'NumpadAdd':      scaleFrame(1 + d * 0.01); break;   // + 확대 (비율 유지, 중심 고정)
-      case 'Minus': case 'NumpadSubtract': scaleFrame(1 - d * 0.01); break;   // - 축소
-      case 'KeyR':       frame = fullFrame(); break;
-      default: hit = false;
-    }
-    if (hit) { if (e.code !== 'KeyR') frame.auto = false; frame.w = Math.max(80, frame.w); frame.h = Math.max(60, frame.h); applyFrame(); e.preventDefault(); }
-  }, true);
+  });
 
   // ───────────────── 창 간 입력 릴레이 ─────────────────
   // 키보드는 포커스된 창에만 오고, 패드는 창마다 보일 수도 안 보일 수도 있다.
@@ -255,7 +236,6 @@
 
   // 한 입력을 두 iframe 게임에 동일하게 전달 (합성 KeyboardEvent)
   function forward(type, e, relayed) {
-    if (adjusting) return;                            // 프레임 조정 중엔 게임에 안 보냄
     if (FWD.indexOf(e.code) < 0) return;
     if (e.code === 'Space') e.preventDefault();       // 페이지 스크롤 방지
     if (!relayed) relaySend({ t: type, code: e.code, key: e.key, repeat: !!e.repeat, src: e.__src || 'kb' });
@@ -416,18 +396,6 @@
   try { Object.assign(ctl, JSON.parse(localStorage.getItem('illegal.ctl')) || {}); } catch (_) {}
   function applyCtl(c) {
     Object.assign(ctl, c);
-    // 컨트롤 패널의 프레임 (% 단위 — 해상도 무관). 값이 있으면 M 키보다 우선, 100/100/0/0 이면 자동(꽉 참)
-    const fk = 'fr.' + (SIDE || 'skate') + '.';
-    if (c[fk + 'w'] !== undefined) {
-      const w = +c[fk + 'w'], h = +c[fk + 'h'], x = +c[fk + 'x'], y = +c[fk + 'y'];
-      if (w === 100 && h === 100 && x === 0 && y === 0) { frame = fullFrame(); }
-      else {
-        const W = innerWidth * w / 100, H = innerHeight * h / 100;
-        frame = { x: Math.round((innerWidth - W) / 2 + innerWidth * x / 100), y: Math.round((innerHeight - H) / 2 + innerHeight * y / 100),
-                  w: Math.round(W), h: Math.round(H), auto: false, pct: { w, h, x, y } };
-      }
-      applyFrame();
-    }
     // 프로젝터가 뒤집혀 있을 때: 180° 회전 / 좌우 반전 (프레임 안에서만)
     const rot = +c[fk + 'rot'] ? 180 : 0, mir = +c[fk + 'mir'] ? -1 : 1;
     document.querySelectorAll('.pane').forEach(p => p.style.transform = (rot || mir < 0) ? `rotate(${rot}deg) scaleX(${mir})` : '');
