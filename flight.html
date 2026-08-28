@@ -1007,8 +1007,8 @@ function update(dt) {
   spdFov  += (((boosting && !autopilot)?1:0) - spdFov) * 0.18;                         // 수동 부스트는 빠르게 반응
   // ★ 카메라는 비행기의 시각 틸트(yawVis/pitchVis/bank)가 아니라 레일 자세(railQ)를 따른다.
   //   plane.quaternion 을 따르면 키 누를 때마다 세상 전체가 확 기울어 '확확 바뀌는' 느낌이 남.
-  // 카메라 거리:  평소 9 · 트릭 6.2 · 부스트 5 · 부스트+트릭 5.8 (부스트 중 트릭은 오히려 살짝 뒤로)
-  const camZ = 9 - 4.0*boostCam - 2.8*trickCam*(1 - boostCam) + 0.8*boostCam*trickCam;
+  // 카메라 거리:  평소 9 · 트릭 4 · 부스트 5 · 부스트+트릭 5.8 (부스트 중 트릭은 오히려 살짝 뒤로)
+  const camZ = 9 - 4.0*boostCam - 5.0*trickCam*(1 - boostCam) + 0.8*boostCam*trickCam;
   _desired.set(0, 2.4 - 0.2*boostCam - 0.5*trickCam*(1 - boostCam), camZ).applyQuaternion(railQ).add(plane.position);
   camera.position.lerp(_desired, 0.06 + 0.45*boostCam + 0.16*spdFov);  // 0.1→0.06 더 느긋하게
   _headW.set(0, 1.2, 0.05).applyQuaternion(plane.quaternion).add(plane.position);      // 캐릭터(머리) 위치
