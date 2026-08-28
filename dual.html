@@ -396,6 +396,7 @@
   try { Object.assign(ctl, JSON.parse(localStorage.getItem('illegal.ctl')) || {}); } catch (_) {}
   function applyCtl(c) {
     Object.assign(ctl, c);
+    const fk = 'fr.' + (SIDE || 'skate') + '.';         // 이 창의 프로젝터 설정 키 접두어
     // 프로젝터가 뒤집혀 있을 때: 180° 회전 / 좌우 반전 (프레임 안에서만)
     const rot = +c[fk + 'rot'] ? 180 : 0, mir = +c[fk + 'mir'] ? -1 : 1;
     document.querySelectorAll('.pane').forEach(p => p.style.transform = (rot || mir < 0) ? `rotate(${rot}deg) scaleX(${mir})` : '');
