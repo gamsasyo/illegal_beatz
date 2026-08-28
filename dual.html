@@ -357,8 +357,11 @@
   let logoIdx = 0, fxBgNow = '', strobePrev = false, fxInvNow = -1;
   const FACE_REPEAT = 10;                          // L2: 얼굴 하나당 번쩍이는 횟수
   // R1 반전 = 킥 엔벨로프. 누르면 즉시 100%, 떼면 INV_DECAY 초에 걸쳐 빠져나감 (지수 감쇠)
-  const INV_DECAY = 0.45;
+  const INV_DECAY = 0.7;
   let invAmt = 0, fxLastT = performance.now();
+  // 연타 10번 → 자동 모드: 두드린 템포로 계속 펄스 (탭 템포). 한 번 더 누르면 해제.
+  const AUTO_TAPS = 10, TAP_MAX_GAP = 1.2;
+  let taps = [], invAuto = 0, invNextBeat = 0, invPrev = false;
   // L2 = 크루 얼굴 셋이 번갈아 (SAWTEETH → SHINS → BEAUTIFUL DISCO). 흰 바탕, 프레임 높이의 62%
   const FX_FACES = ['SAWTEETH', 'SHINS', 'BEAUTIFUL DISCO'].map(n => {
     const u = 'bitmap/' + encodeURIComponent(n) + '.png'; new Image().src = u;
@@ -369,6 +372,7 @@
   function fxRead(b, ax) {
     for (const i in FX_HOLD) fxOn[FX_HOLD[i]] = !!(b[i] && b[i].pressed);
     pickLogo(fxOn.strobe);
+    tapInvert(fxOn.invert);
     for (const i in FX_TAP) {                       // 탭은 눌린 순간에만
       const now = !!(b[i] && b[i].pressed);
       if (now && !tapPrev[i]) flashUntil = performance.now() + 220;
@@ -384,6 +388,24 @@
 
   // L1 이 눌리는 순간마다 로고를 새로 뽑는다 (직전과 다른 것)
   function pickLogo(on) { strobePrev = on; }   // (랜덤 로고 선택은 폐기 — 교차 표시로 대체)
+  // R1 탭 기록. 어택은 여기서 즉시 (그리기 루프 안 기다림)
+  function tapInvert(on) {
+    if (on && !invPrev) {
+      invAmt = 1;
+      const now = performance.now() / 1000;
+      if (invAuto) { invAuto = 0; taps = []; }                       // 자동 중 한 번 더 = 해제
+      else {
+        if (taps.length && now - taps[taps.length - 1] > TAP_MAX_GAP) taps = [];   // 끊기면 처음부터
+        taps.push(now);
+        if (taps.length >= AUTO_TAPS) {                               // 10번 → 템포 잡고 자동
+          const gaps = taps.slice(1).map((t, i) => t - taps[i]).sort((a, b) => a - b);
+          invAuto = gaps[gaps.length >> 1];                           // 중앙값 = 박자 간격(초)
+          invNextBeat = now + invAuto; taps = [];
+        }
+      }
+    }
+    invPrev = on;
+  }
   function fxDraw() {
     const t = performance.now();
     // 스트로브/플래시 = 흰 화면 대신 BEAUTIFUL DISCO 로고 (bitmap/Brick.png, 흰 바탕에 맞춰 넣음)
@@ -397,6 +419,7 @@
     $fx.style.opacity = op;
 
     const dtF = Math.min(0.1, (t - fxLastT) / 1000); fxLastT = t;
+    if (invAuto && t / 1000 >= invNextBeat) { invAmt = 1; invNextBeat += invAuto; }   // 자동 펄스
     if (fxOn.invert) invAmt = 1; else invAmt *= Math.exp(-dtF / (INV_DECAY / 3));   // 3τ ≈ INV_DECAY 에서 5%
     if (invAmt < 0.02) invAmt = 0;
     const f = [];
@@ -406,8 +429,8 @@
 
     const act = Object.keys(fxOn).filter(k => fxOn[k]);
     document.getElementById('fxst').textContent =
-      act.length ? '▓ ' + act.join(' + ').toUpperCase() +
-        (fxOn.strobe ? ' ' + strobeHz.toFixed(0) + 'Hz' : '') : '';
+      (act.length ? '▓ ' + act.join(' + ').toUpperCase() + (fxOn.strobe ? ' ' + strobeHz.toFixed(0) + 'Hz' : '') : '') +
+      (invAuto ? '  ● AUTO INVERT ' + Math.round(60 / invAuto) + ' BPM' : (taps.length ? '  tap ' + taps.length + '/' + AUTO_TAPS : ''));
     requestAnimationFrame(fxDraw);
   }
   fxDraw();
@@ -416,9 +439,9 @@
   const FX_KEY = { Digit1:'strobe', Digit2:'invert', Digit3:'faces', Digit4:'hue' };
   addEventListener('keydown', e => {
     if (e.code === 'Digit5') flashUntil = performance.now() + 220;
-    if (FX_KEY[e.code]) { fxOn[FX_KEY[e.code]] = true; if (e.code === 'Digit1') pickLogo(true); }
+    if (FX_KEY[e.code]) { fxOn[FX_KEY[e.code]] = true; if (e.code === 'Digit1') pickLogo(true); if (e.code === 'Digit2' && !e.repeat) tapInvert(true); }
   });
-  addEventListener('keyup', e => { if (FX_KEY[e.code]) { fxOn[FX_KEY[e.code]] = false; if (e.code === 'Digit1') pickLogo(false); } });
+  addEventListener('keyup', e => { if (FX_KEY[e.code]) { fxOn[FX_KEY[e.code]] = false; if (e.code === 'Digit1') pickLogo(false); if (e.code === 'Digit2') tapInvert(false); } });
 
   addEventListener('gamepadconnected', () => { if (!padRunning) padPoll(); });
   addEventListener('keydown', e => {
