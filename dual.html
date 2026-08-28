@@ -122,7 +122,10 @@
   // auto:true = 아직 손으로 안 맞춘 상태 → 창 크기가 바뀌면(프로젝터로 옮김, 풀스크린) 항상 꽉 채움.
   // 이게 없으면 작은 창에서 로드된 크기가 저장돼 프로젝터에선 여백이 남는다.
   function fullFrame() { return { x: 0, y: 0, w: innerWidth, h: innerHeight, auto: true }; }
-  addEventListener('resize', () => { if (frame.auto) { frame = fullFrame(); applyFrame(); } });
+  addEventListener('resize', () => {
+    if (frame.auto) { frame = fullFrame(); applyFrame(); }
+    else if (frame.pct) applyCtl(ctl);                       // % 프레임은 창 크기 바뀌면 다시 계산 (프로젝터로 옮길 때)
+  });
   function scaleFrame(k) {                      // 중심 고정 비례 확대/축소
     const cx = frame.x + frame.w / 2, cy = frame.y + frame.h / 2;
     frame.w = Math.round(frame.w * k); frame.h = Math.round(frame.h * k);
@@ -356,6 +359,18 @@
   try { Object.assign(ctl, JSON.parse(localStorage.getItem('illegal.ctl')) || {}); } catch (_) {}
   function applyCtl(c) {
     Object.assign(ctl, c);
+    // 컨트롤 패널의 프레임 (% 단위 — 해상도 무관). 값이 있으면 M 키보다 우선, 100/100/0/0 이면 자동(꽉 참)
+    const fk = 'fr.' + (SIDE || 'skate') + '.';
+    if (c[fk + 'w'] !== undefined) {
+      const w = +c[fk + 'w'], h = +c[fk + 'h'], x = +c[fk + 'x'], y = +c[fk + 'y'];
+      if (w === 100 && h === 100 && x === 0 && y === 0) { frame = fullFrame(); }
+      else {
+        const W = innerWidth * w / 100, H = innerHeight * h / 100;
+        frame = { x: Math.round((innerWidth - W) / 2 + innerWidth * x / 100), y: Math.round((innerHeight - H) / 2 + innerHeight * y / 100),
+                  w: Math.round(W), h: Math.round(H), auto: false, pct: { w, h, x, y } };
+      }
+      applyFrame();
+    }
     const r = c.mixR ?? 1, g = c.mixG ?? 1, b = c.mixB ?? 1;
     document.getElementById('mixM').setAttribute('values', `${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`);
     const mixOn = !(r === 1 && g === 1 && b === 1);
