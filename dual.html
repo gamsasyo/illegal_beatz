@@ -81,7 +81,7 @@
 </div>
 <div id="hud">
   <div class="t">ONE CONTROLLER · 한 입력 = 두 게임</div>
-  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>반전(킥) <b>L2</b>얼굴 &nbsp;·&nbsp; <b>R1+R2</b> 오토파일럿</div>
+  <div class="k"><b>W A S D</b> + <b>SPACE</b> → 둘 다 조작 &nbsp;·&nbsp; <b>E</b> 오토파일럿 &nbsp;·&nbsp; <b>I J K L</b> 트릭 &nbsp;·&nbsp; FX <b>L1</b>로고 <b>R1</b>컬러킥 <b>L2</b>얼굴 &nbsp;·&nbsp; <b>R1+R2</b> 오토파일럿</div>
   <div class="st" id="st">MANUAL</div>
   <div class="fx" id="fxst"></div>
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
@@ -362,6 +362,8 @@
   // R1 반전 = 킥 엔벨로프. 누르면 즉시 100%, 떼면 INV_DECAY 초에 걸쳐 빠져나감 (지수 감쇠)
   const INV_DECAY = 0.7;
   let invAmt = 0, fxLastT = performance.now();
+  // 컬러 킥: 칠 때마다 색조가 랜덤하게 크게 뒤집히고(90°~270°) 채도가 터졌다가 엔벨로프 따라 돌아옴
+  let kickHue = 180;
   // 연타 10번 → 자동 모드: 두드린 템포로 계속 펄스 (탭 템포). 한 번 더 누르면 해제.
   const AUTO_TAPS = 10, TAP_MAX_GAP = 1.2;
   let taps = [], invAuto = 0, invNextBeat = 0, invPrev = false;
@@ -398,6 +400,7 @@
   function tapInvert(on) {
     if (on && !invPrev) {
       invAmt = 1;
+      kickHue = 90 + Math.random() * 180;                          // 직전과 다른 색감으로
       const now = performance.now() / 1000;
       if (invAuto) { invAuto = 0; taps = []; }                       // 자동 중 한 번 더 = 해제
       else {
@@ -429,18 +432,18 @@
     $fx.style.opacity = op;
 
     const dtF = Math.min(0.1, (t - fxLastT) / 1000); fxLastT = t;
-    if (invAuto && t / 1000 >= invNextBeat) { invAmt = 1; invNextBeat += invAuto; }   // 자동 펄스
+    if (invAuto && t / 1000 >= invNextBeat) { invAmt = 1; kickHue = 90 + Math.random() * 180; invNextBeat += invAuto; }   // 자동 펄스
     if (fxOn.invert) invAmt = 1; else invAmt *= Math.exp(-dtF / (INV_DECAY / 3));   // 3τ ≈ INV_DECAY 에서 5%
     if (invAmt < 0.02) invAmt = 0;
     const f = [];
-    if (invAmt > 0) f.push('invert(' + invAmt.toFixed(3) + ')');
+    if (invAmt > 0) f.push('hue-rotate(' + (kickHue * invAmt).toFixed(1) + 'deg) saturate(' + (1 + 2.2 * invAmt).toFixed(2) + ')');   // 컬러 킥
     if (fxOn.hue) f.push('hue-rotate(' + Math.floor(t / 6 % 360) + 'deg) saturate(2.5)');
     $wrap.style.filter = f.join(' ');
 
     const act = Object.keys(fxOn).filter(k => fxOn[k]);
     document.getElementById('fxst').textContent =
       (act.length ? '▓ ' + act.join(' + ').toUpperCase() + (fxOn.strobe ? ' ' + strobeHz.toFixed(0) + 'Hz' : '') : '') +
-      (invAuto ? '  ● AUTO INVERT ' + Math.round(60 / invAuto) + ' BPM' : (taps.length ? '  tap ' + taps.length + '/' + AUTO_TAPS : ''));
+      (invAuto ? '  ● AUTO KICK ' + Math.round(60 / invAuto) + ' BPM' : (taps.length ? '  tap ' + taps.length + '/' + AUTO_TAPS : ''));
     requestAnimationFrame(fxDraw);
   }
   fxDraw();
