@@ -1237,8 +1237,8 @@ function cineCam(dt) {                                  // 실제(슬로우모�
     bp.rotation.set(-0.175 * b, P.board.shuv + 1.22 * b, 0);   // 긴축을 약 20° 대각선으로(완전 수평 아님), 살짝 기울여 그립이 위로
     // 캐릭터를 보드보다 '앞'(카메라 반대쪽)으로 밀고 더 높이 — 카메라가 뒤·위에서 보드를 보므로
     // 캐릭터가 카메라와 보드 사이에 끼어 ILLEGAL BEATZ 를 가리지 않는다
-    hipRoot.position.y = skater.userData.hipY + b * (tight ? 3.6 : 2.6);
-    hipRoot.position.z = (skater.userData.hipZ || 0) + b * 2.2;
+    hipRoot.position.y = skater.userData.hipY + b * (tight ? 6.5 : 5.5);   // 프레임 밖으로 완전히
+    hipRoot.position.z = (skater.userData.hipZ || 0) + b * 3.2;
     skater.updateMatrixWorld(true);
     bp.getWorldPosition(_head);                        // 보드 위치(_head 재사용)
     const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
