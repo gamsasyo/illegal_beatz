@@ -420,6 +420,7 @@
     if (fxOn.faces) {                                            // 얼굴 하나당 FACE_REPEAT 번, 점점 커짐
       const n = Math.floor(ph / 2);
       bg = faceBg(Math.floor(n / FACE_REPEAT) % 3, n % FACE_REPEAT); op = (ph % 2) ? 1 : 0;
+      fxInv = 1;                                                 // 얼굴 픽셀만 반전 (투명 배경은 그대로)
     }
     else if (fxOn.strobe) { op = (ph % 2) ? 1 : 0; const k = Math.floor(ph / 2) % 2; bg = FX_LOGOS[k]; fxInv = k; }   // 짝수번째 정상/왼쪽, 홀수번째 반전/오른쪽
     if (flashUntil > t) op = Math.max(op, (flashUntil - t) / 220);   // 한 방 번쩍 + 감쇠
