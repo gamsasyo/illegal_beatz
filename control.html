@@ -139,6 +139,34 @@
   paint(); send();
   setInterval(send, 3000);
 
+  // ── 게임패드 릴레이 — 이 창(컨트롤)에 포커스가 있어도 패드가 게임 창으로 감 ──
+  //   dual.html 과 같은 매핑. 게임 창은 자기 패드가 안 보일 때만 이걸 받는다 (중복 없음)
+  const PAD_BTN = { 0:'Space', 3:'KeyI', 2:'KeyJ', 1:'KeyL', 7:'KeyK', 12:'KeyW', 13:'KeyS', 14:'KeyA', 15:'KeyD' };
+  const FX_HOLD = { 4:'strobe', 5:'invert', 6:'faces' };
+  const padPrev = {}, fxOn = { strobe:false, invert:false, faces:false, hue:false };
+  let optPrev = false, chordPrev = false, fxSig = '', padSeen = '';
+  const padEl = document.getElementById('st');
+  function tapE() { ch.postMessage({ t:'keydown', code:'KeyE', key:'e', repeat:false, src:'pad' }); setTimeout(() => ch.postMessage({ t:'keyup', code:'KeyE', key:'e', repeat:false, src:'pad' }), 40); }
+  function padLoop() {
+    const gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(p => p && p.connected);
+    if (gp) {
+      if (gp.id !== padSeen) { padSeen = gp.id; padEl.textContent = 'PAD ' + gp.id.slice(0, 30) + ' (이 창에서 릴레이 중)'; }
+      const b = gp.buttons, ax = gp.axes;
+      const want = { KeyW:false, KeyA:false, KeyS:false, KeyD:false, Space:false, KeyI:false, KeyJ:false, KeyK:false, KeyL:false };
+      for (const i in PAD_BTN) if (b[i] && b[i].pressed) want[PAD_BTN[i]] = true;
+      const lx = ax[0] || 0, ly = ax[1] || 0;
+      if (ly < -0.35) want.KeyW = true; if (ly > 0.35) want.KeyS = true; if (lx < -0.35) want.KeyA = true; if (lx > 0.35) want.KeyD = true;
+      for (const s in want) if (!!padPrev[s] !== want[s]) { padPrev[s] = want[s]; ch.postMessage({ t: want[s] ? 'keydown' : 'keyup', code:s, key:s, repeat:false, src:'pad' }); }
+      const opt = !!(b[9] && b[9].pressed); if (opt && !optPrev) tapE(); optPrev = opt;
+      const chord = !!(b[5] && b[5].pressed && b[7] && b[7].pressed); if (chord && !chordPrev) tapE(); chordPrev = chord;
+      for (const i in FX_HOLD) fxOn[FX_HOLD[i]] = !!(b[i] && b[i].pressed);
+      const hz = 14 - (ax[3] || 0) * 10, sig = JSON.stringify(fxOn) + '|' + hz.toFixed(1);
+      if (sig !== fxSig) { fxSig = sig; ch.postMessage({ t:'fx', on: fxOn, hz }); }
+    }
+    requestAnimationFrame(padLoop);
+  }
+  padLoop();
+
   // ── 마이크 킥 감지 → 'kick' 브로드캐스트 (게임 창이 R1 탭과 똑같이 인버트 펄스) ──
   let micOn = false, ac = null, an = null, buf = null, avg = 0, lastKick = 0, hits = 0;
   const micBtn = document.getElementById('mic'), sensEl = document.getElementById('micSens'), gapEl = document.getElementById('micGap');

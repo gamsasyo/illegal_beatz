@@ -163,7 +163,10 @@
   // 천장 캔버스가 사다리꼴/비스듬해도 맞출 수 있음. 값은 창 크기 대비 비율로 저장 → 해상도 바뀌어도 유지.
   var warpReady = false;                              // var: 위 applyFrame 이 먼저 실행됨
   const CORNER_KEY = 'corners:' + (SIDE || 'dual');
-  let corners = null, cornerResetSeen = 0, cornerCtlSeen = -1;             // [{x,y}×4] 창 기준 px, TL TR BR BL
+  let corners = null, cornerResetSeen = 0, cornerCtlSeen = -1;
+  // 저장된 컨트롤 패널 값의 리셋 카운터/토글은 '이미 본 것'으로 — 새로고침 때 모서리가 리셋되거나 핸들이 켜지지 않게
+  try { const c0 = JSON.parse(localStorage.getItem('illegal.ctl')) || {}; const k0 = 'fr.' + (SIDE || 'skate') + '.';
+        cornerResetSeen = c0[k0 + 'cornerReset'] || 0; cornerCtlSeen = +(c0[k0 + 'corner'] || 0); } catch (_) {}             // [{x,y}×4] 창 기준 px, TL TR BR BL
   try { const c = JSON.parse(localStorage.getItem(CORNER_KEY)); if (c && c.length === 4) corners = c.map(p => ({ x: p.fx * innerWidth, y: p.fy * innerHeight })); } catch (_) {}
   const hdls = [...document.querySelectorAll('.hdl')];
   function frameCorners() { return [{x:frame.x,y:frame.y},{x:frame.x+frame.w,y:frame.y},{x:frame.x+frame.w,y:frame.y+frame.h},{x:frame.x,y:frame.y+frame.h}]; }
@@ -202,6 +205,7 @@
   addEventListener('resize', () => { if (corners) { try { const c = JSON.parse(localStorage.getItem(CORNER_KEY)); corners = c.map(p => ({ x: p.fx * innerWidth, y: p.fy * innerHeight })); } catch (_) {} applyWarp(); } });
   warpReady = true; applyWarp();
   addEventListener('keydown', e => {
+    if (e.__src === 'pad') return;                                     // 패드 R2 = KeyK(트릭) — 모서리 모드는 키보드 K 로만
     if (e.code === 'KeyK' && !e.repeat) setCorner(!document.body.classList.contains('corner'));   // K = 모서리 드래그 모드
     if (e.code === 'KeyR' && document.body.classList.contains('corner')) { corners = null; localStorage.removeItem(CORNER_KEY); applyFrame(); }
   });
