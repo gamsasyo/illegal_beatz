@@ -87,6 +87,10 @@
   <div class="pd" id="pd">PAD 연결 안 됨 — 컨트롤러 아무 버튼이나 누르세요</div>
 </div>
 <div id="frameTxt"></div>
+<!-- RGB 채널 믹스 — CSS filter 로는 채널 게인이 안 돼서 SVG feColorMatrix 를 씀. 값은 컨트롤 패널이 갱신 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="mix" color-interpolation-filters="sRGB">
+  <feColorMatrix id="mixM" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
+</filter></svg>
 <div id="dbg" class="hidden"></div>
 <div id="boot"><div><div class="c">한 키보드로 스케이트보드 + 비행기를 동시에.<br>같은 WASD·SPACE 신호가 두 게임에 똑같이 들어감.</div>
   <div class="go">▶ 클릭해서 시작 (키보드 포커스)</div>
@@ -351,7 +355,10 @@
   try { Object.assign(ctl, JSON.parse(localStorage.getItem('illegal.ctl')) || {}); } catch (_) {}
   function applyCtl(c) {
     Object.assign(ctl, c);
-    const tone = side => `hue-rotate(${c[side + '.hue'] || 0}deg) saturate(${c[side + '.sat'] ?? 1}) contrast(${c[side + '.con'] ?? 1}) brightness(${c[side + '.bri'] ?? 1})`;
+    const r = c.mixR ?? 1, g = c.mixG ?? 1, b = c.mixB ?? 1;
+    document.getElementById('mixM').setAttribute('values', `${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`);
+    const mixOn = !(r === 1 && g === 1 && b === 1);
+    const tone = side => `hue-rotate(${c[side + '.hue'] || 0}deg) saturate(${c[side + '.sat'] ?? 1}) contrast(${c[side + '.con'] ?? 1}) brightness(${c[side + '.bri'] ?? 1})` + (mixOn ? ' url(#mix)' : '');
     const fa = document.getElementById('a'), fb = document.getElementById('b');
     if (fa) fa.parentElement.style.filter = tone('skate');
     if (fb) fb.parentElement.style.filter = tone('flight');

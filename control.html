@@ -42,6 +42,15 @@
     <div class="row"><label>CONTRAST</label><input type="range" data-k="flight.con" min="0.4" max="2.2" step="0.05" value="1"><output>1</output></div>
     <div class="row"><label>BRIGHT</label><input type="range" data-k="flight.bri" min="0.3" max="2" step="0.05" value="1"><output>1</output></div>
   </div>
+  <div class="box"><h2>🎛 RGB 채널 믹스 (양쪽 공통)</h2>
+    <div class="row"><label>RED</label><input type="range" data-k="mixR" min="0" max="2" step="0.05" value="1"><output>1</output></div>
+    <div class="row"><label>GREEN</label><input type="range" data-k="mixG" min="0" max="2" step="0.05" value="1"><output>1</output></div>
+    <div class="row"><label>BLUE</label><input type="range" data-k="mixB" min="0" max="2" step="0.05" value="1"><output>1</output></div>
+    <div class="btns">
+      <button data-mix="1,0.18,0.18">전부 빨강</button><button data-mix="0.18,1,0.25">전부 초록</button>
+      <button data-mix="0.2,0.3,1">전부 파랑</button><button data-mix="1,1,1">원색</button>
+    </div>
+  </div>
   <div class="box"><h2>⚡ STROBE</h2>
     <div class="row"><label>로고 바탕</label><input type="color" data-k="logoBg" value="#ffffff"><output></output></div>
     <div class="row"><label>로고 크기</label><input type="range" data-k="logoSize" min="30" max="120" value="72"><output>72</output></div>
@@ -91,6 +100,9 @@
   for (const el of els) el.addEventListener('input', () => {
     ctl[el.dataset.k] = el.type === 'range' ? +el.value : el.value; paint(); send();
   });
+  document.querySelectorAll('[data-mix]').forEach(bt => bt.addEventListener('click', () => {
+    const [r, g, b] = bt.dataset.mix.split(',').map(Number); ctl.mixR = r; ctl.mixG = g; ctl.mixB = b; paint(); send();
+  }));
   document.getElementById('reset').addEventListener('click', () => { Object.assign(ctl, defaults); ctl.black = false; paint(); send(); });
   document.getElementById('black').addEventListener('click', () => { ctl.black = !ctl.black; paint(); send(); });
   paint(); send();
